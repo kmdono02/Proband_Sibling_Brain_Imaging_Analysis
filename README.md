@@ -1,4 +1,4 @@
-# Proband_Sibling_Brain_Imaging_Analysis
+# Proband Sibling Brain Imaging Analysis
 R code for statistical analysis generating results referenced in Girault et al. (2020)
   
 **1) Plots_Tables**
