@@ -1,0 +1,6 @@
+"","Variable","Estimate","CI_95","DF","p_value","p_value_FDR"
+"1","SCQ_Pro_Score",-6.646,"(-12.48, -0.81)",266,"0.026",NA
+"2","RiskGroupHR-ASD",-622.994,"(-993.87, -252.12)",266,"0.001",NA
+"3","RiskGroupHR-ASD:SCQ_Pro_Score",26.76,"(10.9, 42.61)",266,"0.001",NA
+"4","Proband_SexMale",-39.051,"(-127.68, 49.58)",266,"0.386",NA
+"5","Cand_SexMale",145.222,"(82.83, 207.61)",266,"<0.001",NA

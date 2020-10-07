@@ -1,0 +1,1372 @@
+---
+title: "Analysis-Version 2"
+author: "Kevin Donovan"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r libraries}
+library(readxl)
+library(tidyverse)
+library(psych)
+library(tableone)
+library(kableExtra)
+library(formula.tools)
+library(nlme)
+```
+
+# Introduction
+In this document, we will do some preliminary analyses of an IBIS dataset consisting of information about Proband siblings (siblings of children with Autism).  This data includes background demographic information (sex of sibling and Proband, parent information, etc.), various behavioral measures (ADOS, ADIR, CSBS, etc.) and as well brain structure information (TCV, TSA, EACSF, etc.) across various time points.  Siblings were observed at 6, 12, and 24 months of age.  The preliminary analyses will consist of
+
+1) Summary statistics table for all variables
+
+2) Data visualizations of group differences by diagnosis of sibling
+
+3) Measures/visualizations of associations between SCQ and brain measures.
+
+We are also interested in the following, more specified brain measures:
+
+a) Fractional Anisotropy (FA) of major white matter tracts: CCbody, CCGenu, CCSplenium 
+
+b) Amygdala volumes (Amyg) 
+
+c) Brain Thickness (Axis_Mean_Thickness)
+
+d) Surface Area in selected regions of interest (ROIs):
+
+ROI08 = Right Medial Frontal Gyrus
+
+ROI41 = Left Cuneus Gyrus
+
+ROI42 = Right Cuneus Gyrus 
+
+ROI44 = Right Lingual Gyrus
+
+ROI47 = Left Middle Occipital Gyrus 
+
+ROI48 = Right Middle Occipital Gyrus 
+
+ROI77 = Left Inferior Temporal Gyrus 
+
+e) Control ROIs:
+
+ROI01 = Left Precentral Gyrus
+
+ROI02 = Right Precentral Gyrus 
+
+ROI59 = Left Supramarginal Gyrus
+
+ROI60 = Right Supramarginal Gyrus
+
+# Read-in Data
+First, we read in the data as a XLSX file using the function **read_excel()**, which requires the **readxl** package (see above code).  Due to the large number of variables in the dataset, we create another dataset in R with a subset of variables which are of interest for a table of summary statistics.  We will also create a form of this dataset in long format.
+
+```{r read_in_data}
+data_noCC <- 
+  read_excel("Data/Dataset_ProSibDems_SibMRI_v2_2019_11_20.xlsx",
+                   na = c("", "NA")) %>%
+  mutate(Cand_Race=factor(Cand_Race))
+
+data_CC <- read_csv("Data/IBIS_CC_thickness_2014.csv",
+                   na = c("", "NA")) %>%
+  plyr::rename(replace=c("ID"="CandID"))
+  
+# Removing one subject Jessica mentnioned who should be excluded
+data <- merge(data_noCC, data_CC, by="CandID", all.x = TRUE) %>%
+  filter(!PSCID%in%c("STL1052"))
+
+# data <- read_excel("Data/Dataset_ProSibDems_SibMRI_v2_2019_11_20.xlsx",
+#                    na = c("", "NA")) %>%
+#   mutate(Cand_Race=factor(Cand_Race))
+
+levels(data$Cand_Race)[grepl("@",levels(data$Cand_Race))] <-
+  "more_than_one_race"
+
+levels(data$Cand_Race)[grepl("black",levels(data$Cand_Race))] <-
+  "black"
+
+summ_stats_data_wide <- data %>%
+  select(PSCID, DX_Subgroups,Site:Mother_Edu,
+         AgeMRI_V06:AgeMRI_V24,
+         Cand_Sex, Proband_Sex, 
+         Pro_Age_SCQ_y,
+         SCQ_Pro_Score,
+         V24_ADOS_RRB:V24_ADOS_SA,V24_ADOS_SevScore,
+         V24_ADIR_A_Tot, V24_ADIR_BNV_Tot:V24_ADIR_D_Tot,
+         V06_AOSI_Total, V12_AOSI_Total,
+         V24_CSBS_Comm:V12_CSBS_Words,
+         V24_MSEL_ELC:V06_MSEL_ELC, V24_MSEL_EL_ts:V06_MSEL_EL_ts,
+         V24_MSEL_FM_ts:V06_MSEL_FM_ts,
+         V24_MSEL_GM_ts:V06_MSEL_GM_ts,
+         V24_MSEL_RL_ts:V06_MSEL_RL_ts,
+         V24_MSEL_VR_ts:V06_MSEL_VR_ts,
+         V24_VABS_ABC:V12_VABS_CS_VS, V24_VABS_DLS_SS:V12_VABS_SOC_SS,
+         TCV_V06:TCV_V24,
+         TSA_V06:EACSF_V24,
+         CCbody_V06:CCGenu_V24,CCSplenium_V06:CCSplenium_V24,
+         Amyg_V06:Amyg_V24,
+         ROI01_V06:ROI02_V24,
+         ROI08_V06:ROI08_V24,
+         ROI41_V06:ROI42_V24,
+         ROI44_V06:ROI44_V24,
+         ROI47_V06:ROI48_V24,
+         ROI59_V06:ROI60_V24,
+         ROI77_V06:ROI77_V24,
+         Axis_Mean_Thickness_V06:Axis_Mean_Thickness_V24
+         ) %>%
+  plyr::rename(c("AgeMRI_V06"="V06_AgeMRI",
+                 "AgeMRI_V12"="V12_AgeMRI",
+                 "AgeMRI_V24"="V24_AgeMRI",
+                 "TCV_V06"="V06_TCV",
+                 "TCV_V12"="V12_TCV",
+                 "TCV_V24"="V24_TCV",
+                 "TSA_V06"="V06_TSA",
+                 "TSA_V12"="V12_TSA",
+                 "TSA_V24"="V24_TSA",
+                 "EACSF_V06"="V06_EACSF",
+                 "EACSF_V12"="V12_EACSF",
+                 "EACSF_V24"="V24_EACSF",
+                 "CCbody_V06"="V06_CCbody",
+                 "CCbody_V12"="V12_CCbody",
+                 "CCbody_V24"="V24_CCbody",
+                 "CCGenu_V06"="V06_CCGenu",
+                 "CCGenu_V12"="V12_CCGenu",
+                 "CCGenu_V24"="V24_CCGenu",
+                 "CCSplenium_V06"="V06_CCSplenium",
+                 "CCSplenium_V12"="V12_CCSplenium",
+                 "CCSplenium_V24"="V24_CCSplenium",
+                 "Amyg_V06"="V06_Amyg",
+                 "Amyg_V12"="V12_Amyg",
+                 "Amyg_V24"="V24_Amyg",
+                 "ROI01_V06"="V06_ROI01",
+                 "ROI01_V12"="V12_ROI01",
+                 "ROI01_V24"="V24_ROI01",
+                 "ROI02_V06"="V06_ROI02",
+                 "ROI02_V12"="V12_ROI02",
+                 "ROI02_V24"="V24_ROI02",
+                 "ROI08_V06"="V06_ROI08",
+                 "ROI08_V12"="V12_ROI08",
+                 "ROI08_V24"="V24_ROI08",
+                 "ROI41_V06"="V06_ROI41",
+                 "ROI41_V12"="V12_ROI41",
+                 "ROI41_V24"="V24_ROI41",
+                 "ROI42_V06"="V06_ROI42",
+                 "ROI42_V12"="V12_ROI42",
+                 "ROI42_V24"="V24_ROI42",
+                 "ROI44_V06"="V06_ROI44",
+                 "ROI44_V12"="V12_ROI44",
+                 "ROI44_V24"="V24_ROI44",
+                 "ROI47_V06"="V06_ROI47",
+                 "ROI47_V12"="V12_ROI47",
+                 "ROI47_V24"="V24_ROI47",
+                 "ROI48_V06"="V06_ROI48",
+                 "ROI48_V12"="V12_ROI48",
+                 "ROI48_V24"="V24_ROI48",
+                 "ROI59_V06"="V06_ROI59",
+                 "ROI59_V12"="V12_ROI59",
+                 "ROI59_V24"="V24_ROI59",
+                 "ROI60_V06"="V06_ROI60",
+                 "ROI60_V12"="V12_ROI60",
+                 "ROI60_V24"="V24_ROI60",
+                 "ROI77_V06"="V06_ROI77",
+                 "ROI77_V12"="V12_ROI77",
+                 "ROI77_V24"="V24_ROI77"
+                 ,"Axis_Mean_Thickness_V06"="V06_Axis_Mean_Thickness",
+                 "Axis_Mean_Thickness_V12"="V12_Axis_Mean_Thickness",
+                 "Axis_Mean_Thickness_V24"="V24_Axis_Mean_Thickness"
+                 )) %>%
+  mutate(Mother_Edu=
+           factor(plyr::revalue(Mother_Edu, c("high_school"="less_than_college",
+                                              "some_college"="less_than_college",
+                                              "some_hs"="less_than_college")),
+                  levels = c("less_than_college", "college_degree", 
+                             "some_grad_level", "grad_degree", "not_answered")),
+         Cand_Race=factor(Cand_Race, levels=
+                            c("asian","black","more_than_one_race","white","not_answered")))
+
+vars_to_convert <- names(summ_stats_data_wide[grepl("V06|V12|V24",
+                                              names(summ_stats_data_wide))])
+
+summ_stats_data_long <- 
+  summ_stats_data_wide %>%
+  gather(variable, var_value, vars_to_convert) %>%
+  separate(variable,c("Visit","Variable"),sep=4) %>%
+  spread(key=Variable, value=var_value) %>%
+  mutate(Visit=gsub("_","",Visit)) %>%
+  arrange(PSCID, Visit) %>%
+  select(PSCID, Visit, everything())
+
+brain_vars <- 
+  c("EACSF", "TCV", "TSA",
+    "CCbody", "CCGenu", "CCSplenium",
+    "ROI01", "ROI02", "ROI08", "ROI41", "ROI42", "ROI44", "ROI47", "ROI48",
+    "ROI59", "ROI60", "ROI77"
+    )
+# Make sure all brain measures are numeric
+summ_stats_data_long[,c(brain_vars, "AgeMRI")] <- 
+  lapply(summ_stats_data_long[,c(brain_vars, "AgeMRI")], as.numeric)
+
+summ_stats_data_long <- summ_stats_data_long %>%
+  mutate(RiskGroup=relevel(factor(RiskGroup), ref = "HR-Neg"),
+         Cand_Sex=relevel(factor(Cand_Sex), ref = "Male"),
+         Proband_Sex=relevel(factor(Proband_Sex), ref = "Male"),
+         Pro_SCQgrp=ifelse(SCQ_Pro_Score>=21&RiskGroup=="HR-ASD", "high",
+                           ifelse(SCQ_Pro_Score<21&RiskGroup=="HR-ASD", "low",
+                                  ifelse(RiskGroup=="HR-Neg"|is.na(SCQ_Pro_Score)==1, NA, NA)))
+         ) %>%
+  mutate(Pro_SCQgrp=relevel(factor(Pro_SCQgrp), ref='low'))
+
+summ_stats_data_long_baseline <- 
+  summ_stats_data_long %>%
+  select(PSCID, Visit, Site:Mother_Edu, Cand_Sex, Pro_Age_SCQ_y, ADOS_SevScore, Pro_SCQgrp) %>%
+  filter(Visit=="V24") %>%
+  select(-PSCID, -Visit) %>%
+  mutate(Father_Age_y=as.numeric(Father_Age_y),
+         Mother_Age_y=as.numeric(Mother_Age_y),
+         Pro_Age_SCQ_y=as.numeric(Pro_Age_SCQ_y),
+         ADOS_SevScore=as.numeric(ADOS_SevScore))
+
+summ_stats_data_long_time <- 
+  summ_stats_data_long %>%
+  select(-PSCID,-Site, -Proband_Sex:-Mother_Edu)
+
+summ_stats_data_long_time[,c(-1,-2,-3)] <-     
+  lapply(summ_stats_data_long_time[,c(-1,-2,-3)], as.numeric)
+
+```
+
+# Summary Statistics Tables
+Here we create separate summary statistics tables for 
+
+1) Variables at baseline, by diagnosis
+2) Variables measured across time, by diagnosis and time point
+
+```{r create_summ_stats_tables, eval=FALSE}
+baseline_summ_table <- tableone::CreateTableOne(data=summ_stats_data_long_baseline,
+                         strata="RiskGroup",
+                         vars=c("Cand_Sex", "Cand_Race", "Mother_Edu", "SCQ_Pro_Score",
+                                "ADOS_SevScore"),
+                         includeNA=TRUE)
+
+print(baseline_summ_table, showAllLevels = TRUE,
+      quote = FALSE, noSpaces = TRUE, printToggle = FALSE, exact=c("Cand_Race", "Mother_Edu"))
+
+print_summtable_obj <- print(baseline_summ_table, showAllLevels = TRUE,
+      quote = FALSE, noSpaces = TRUE, printToggle = FALSE, exact=c("Cand_Race", "Mother_Edu"))
+
+# Check h testing for Sex, ADOS, SQC
+chisq.test(x=summ_stats_data_long_baseline$Cand_Sex,
+           y=summ_stats_data_long_baseline$RiskGroup)
+t.test(formula = SCQ_Pro_Score~RiskGroup, data=summ_stats_data_long_baseline)
+t.test(formula = ADOS_SevScore~RiskGroup, data=summ_stats_data_long_baseline)
+
+## Save to a CSV file
+write.csv(print_summtable_obj, file="Plots_Tables/baseline_summ_table.csv")
+
+baseline_summ_table_proband <- tableone::CreateTableOne(data=summ_stats_data_long_baseline,
+                         vars=c("Proband_Sex", "Mother_Edu", "SCQ_Pro_Score",
+                                "ADOS_SevScore"),
+                         includeNA=TRUE)
+print_summtable_obj_proband <- print(baseline_summ_table_proband, showAllLevels = TRUE,
+      quote = FALSE, noSpaces = TRUE, printToggle = FALSE, exact=c("Cand_Race", "Mother_Edu"))
+write.csv(print_summtable_obj_proband, file="Plots_Tables/baseline_summ_table_proband.csv")
+```
+
+# Exploratory Plots
+Here we create the following plots to provide a visual overview of the variables of interest (Proband SCQ and brain structure):
+
+1) Histograms of brain structure measures (EACSF, TCV, TSA, etc.)
+2) Scatterplots of Proband SCQ by brain structure
+
+both sets by visit and diagnosis.
+
+```{r scq_brain_scatterplots}
+# Scatterplots: SCQ by various brain measures by visit and diagnosis group
+for(i in 1:length(brain_vars)){
+  scattergg <- ggplot(data=summ_stats_data_long_time, 
+         mapping=aes_string(x="SCQ_Pro_Score", 
+                     y=brain_vars[i],
+                     color="RiskGroup"))+
+    geom_point()+
+    geom_smooth(method="lm", se=FALSE)+
+    facet_wrap(~Visit)+
+    labs(title = 
+           paste0("Scatterplot of SCQ Proband Score by sibling ", 
+                  brain_vars[i],
+                  " by visit\ncolored by diagnosis"),
+         y=brain_vars[i])
+  print(scattergg)
+}
+
+# Calc estimated correlations with 95% CIs, p-values
+corr_calc <- function(vars, time, dataset=summ_stats_data_long){
+  data_subset_time <- dataset %>%
+    filter(Visit==time)
+  
+  data_subset_time_ASD <- data_subset_time %>% 
+    filter(RiskGroup=="HR-ASD")
+  
+  data_subset_time_neg <- data_subset_time %>% 
+    filter(RiskGroup=="HR-Neg")
+  
+  return_obj <- list(
+    "ASD"=list(cor(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    
+    "Neg"=list(cor(data_subset_time_neg[[vars[1]]], data_subset_time_neg[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time_neg[[vars[1]]], data_subset_time_neg[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time_neg[[vars[1]]], data_subset_time_neg[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time_neg[[vars[1]]], data_subset_time_neg[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    
+    "Sample"=list(cor(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    "Variables"=paste(vars, collapse=" by "))
+
+  return(return_obj)
+}
+
+corr_table_google_doc <- function(dataset, x1, x2, 
+                                  visits=rep(list(c("V06", "V12", "V24")), length(x2)), 
+                                  group, fdr_method="fdr", fdr_vars, plot_form=FALSE){
+  vars_corr_v2 <- expand.grid(x1, unlist(mapply(rep, x2, lengths(visits))))
+  
+  corr_mat <- data.frame(matrix(nrow=dim(vars_corr_v2)[1], 
+                       ncol=5))
+  
+  corr_mat[,1] <- unlist(visits)
+  
+  corr_mat[,2] <- vars_corr_v2[,2]
+  names(corr_mat) <- c("Time", "Variable", "n", "Estimate","p_value")
+  
+  for(i in 1:dim(vars_corr_v2)[1]){
+    # sample size
+    corr_mat[i,3]=corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[4]]
+      
+    # estimate, CI
+    corr_mat[i,4]=paste0(
+      round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[1]],2), ": (",
+      paste(round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                            time=corr_mat[i,1], dataset=dataset)[[group]][[2]], 2),
+            collapse=", "),
+      ")")
+    # p-value
+    corr_mat[i,5]=round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[3]],3)
+  }
+  corr_mat <- corr_mat %>% arrange(Variable)
+  
+  # Create aternative format for use in colored table indicating sign. associations
+  if(plot_form==TRUE){
+    corr_mat_v2 <- corr_mat %>%
+      mutate(Estimate_pval = paste0(Estimate,", ", p_value)) %>%
+      select(Time, Variable, Estimate_pval)
+    
+    corr_mat_flip <- corr_mat_v2 %>%
+      spread(Variable,Estimate_pval)
+    
+    color_cols <- corr_mat %>%
+      filter(p_value<0.05) %>%
+      select(Variable) %>% 
+      unique() %>%
+      unlist()
+
+    color_cols_index <- match(color_cols, names(corr_mat_flip))
+    return(list("table"=corr_mat,
+                "table_flip"=corr_mat_flip,
+                "sig_markers"=color_cols_index))
+  } else {
+    
+    # Correct p-values for multiple comps using B+Y 2001 based on FDR
+    FDR_correct_pvals <- 
+  p.adjust(p=corr_mat$p_value[corr_mat$Variable%in%fdr_vars], 
+           method=fdr_method)
+    
+    corr_mat$p_value_FDR <- NA
+  corr_mat$p_value_FDR[corr_mat$Variable%in%fdr_vars] <- 
+    round(FDR_correct_pvals,3)
+  
+  # Make CI a separate column
+  corr_mat <- corr_mat %>% 
+    separate(Estimate, into=c("Estimate", "CI"), sep = ": ")
+
+    return(corr_mat)
+  }
+}
+
+# kable(corr_mat_Neg_flip,"html",
+#       caption="Correations: HR-Neg Group") %>%
+#   kable_styling() %>%
+#   column_spec(color_cols_Neg_index, 
+#               bold = T, color = "white", background = "red") %>%
+#   save_kable("corr_mat_Neg.jpeg")
+
+# kable(corr_mat_ASD_flip,
+#       caption="Correations: HR-ASD Group") %>%
+#   kable_styling() %>%
+#   column_spec(color_cols_ASD_index, 
+#               bold = T, color = "white", background = "red") %>%
+#   save_kable("corr_mat_ASD.png")
+
+# For Google Doc table
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="SCQ_Pro_Score", x2=brain_vars, group="ASD", 
+                        fdr_vars=c("EACSF","TCV","TSA")) %>%
+  mutate(Variable=forcats::fct_relevel(factor(Variable), "TSA", "TCV", "EACSF")) %>%
+  arrange(Variable, Time)
+
+corr_mat_Neg_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="SCQ_Pro_Score", x2=brain_vars, group="Neg", 
+                        fdr_vars=c("EACSF","TCV","TSA")) %>%
+  mutate(Variable=forcats::fct_relevel(factor(Variable), "TSA", "TCV", "EACSF")) %>%
+  arrange(Variable, Time)
+
+write.csv(corr_mat_ASD_doc_form, file = "Plots_Tables/corr_mat_ASD_SQC_Primary.csv")
+write.csv(corr_mat_Neg_doc_form, file = "Plots_Tables/corr_mat_Neg_SCQ_Primary.csv")
+```
+
+# Linear Regression-No Confounding Variables
+Here we consider fitting linear regression models to estimate the assoications between various brain measures (EACSF, TCV, TSA, etc.) and Proband SCQ Total Score.  We model different associations for each diagnosis group using an interaction term between diagnosis and diagnosis.  The models can be summarized as follows:
+
+$Y=\beta_0+\beta_1*Diagnosis+\beta_2*\mbox{SCQ_Proband_Score}+\beta_3*\mbox{SCQ_Proband_Score}*Diagnosis$
+
+where $Y$ is one of the brain measures.  First, we do not control for possible confounding variables.  For each model, we print the regression parameter estimates/p-values and two diagnostic plots (fitted values by residuals and residuals QQ plot).  Due to the longitudinal nature of the data, we run separate analyses for each time pont.
+```{r linear_reg, results='asis'}
+lm_fit_calc <- function(frmla, time){
+  data_subset_time <- summ_stats_data_long %>%
+    filter(Visit==time)
+  
+  fit <- lm(frmla, data=data_subset_time)
+  
+  return(fit)
+}
+
+time_list <- c("V06",
+                  "V12",
+                  "V24")
+
+for(i in 1:length(brain_vars)){
+   for(j in 1:length(time_list)){
+    frmla_val <-  
+      as.formula(paste0(brain_vars[i],
+             "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score"))
+     
+    fit <- lm_fit_calc(frmla_val, time_list[j])
+    print(paste("Visit = ", time_list[j], sep=" "))
+    print(paste("Model = ", as.character(frmla_val), sep=""))
+    
+    cis <- paste("(", round(confint(fit)[,1], 2),
+                 ", ", round(confint(fit)[,2], 2),")", sep="")
+    fit_matrix <- data.frame(summary(fit)$coefficients, "CI_95"=cis) %>%
+                    select(Estimate, `Pr...t..`, CI_95) %>%
+                    plyr::rename(c("Pr...t.."="p_value")) %>%
+                    mutate(Estimate=round(Estimate, 2),
+                           p_value=ifelse(p_value<0.001,
+                                          "<0.001", round(p_value, 3)))
+    
+    rownames(fit_matrix) <- rownames(summary(fit)$coefficients)
+    
+    kable(fit_matrix, caption=frmla_val) %>% kable_styling() %>% print()
+    # plot(x=fit$fitted.values, 
+    #      y=fit$residuals, 
+    #      main=paste("Residual by Fitted Values:\n",
+    #                 as.character(frmla_val)),
+    #      sub=time_list[j])
+    # qqnorm(y=fit$residuals, main = "Residual QQ Plot:\nAssess Normality")
+    # qqline(y=fit$residuals)
+   }
+ }
+```
+
+# Linear Regression-Confounding Variables
+Now, we conduct the same linear regression analysis as was done before but also include a set of possible confouding variables for eahch model.  The variables are: Proband sex, study site for infant, age of the infant at MRI scan, age of Proband, and sex of infant.  We print the same output as in the previous linear regrsssion analysis.
+```{r linear_reg_confound, results='asis'}
+time_list <- c("V06",
+                  "V12",
+                  "V24")
+
+
+for(i in 1:length(brain_vars)){
+   for(j in 1:length(time_list)){
+    frmla_val <-  
+      as.formula(paste0(brain_vars[i],
+             "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
+                     Proband_Sex+Site+AgeMRI+Pro_Age_SCQ_y+Cand_Sex"))
+     
+    fit <- lm_fit_calc(frmla_val, time_list[j])
+    print(paste("Visit = ", time_list[j], sep=" "))
+    print(paste("Model = ", as.character(frmla_val), sep=""))
+    
+    cis <- paste("(", round(confint(fit)[,1], 2),
+                 ", ", round(confint(fit)[,2], 2),")", sep="")
+    fit_matrix <- data.frame(summary(fit)$coefficients, "CI_95"=cis) %>%
+                    select(Estimate, `Pr...t..`, CI_95) %>%
+                    plyr::rename(c("Pr...t.."="p_value")) %>%
+                    mutate(Estimate=round(Estimate, 2),
+                           p_value=ifelse(p_value<0.001,
+                                          "<0.001", round(p_value, 3)))
+    
+    rownames(fit_matrix) <- rownames(summary(fit)$coefficients)
+    
+    kable(fit_matrix, caption=frmla_val) %>% kable_styling() %>% print()
+    # plot(x=fit$fitted.values, 
+    #      y=fit$residuals, 
+    #      main=paste("Residual by Fitted Values:\n",
+    #                 as.character(frmla_val)),
+    #      sub=time_list[j])
+    # qqnorm(y=fit$residuals, main = "Residual QQ Plot:\nAssess Normality")
+    # qqline(y=fit$residuals)
+   }
+ }
+```
+
+## Effect Sizes
+Using the linear regression results we can compute effect sizes for these associations.  We consider two effect size definitions.
+
+1) Percent differences between LS means for brain measure in model of proband SCQ groups (High and Low), adjusted for potential confounders
+2) Cohen's D for differences in brain measure between proband SCQ groups (High and Low), adjusted for potential confounders
+
+We calculate these at 6 month, 12 month, and 24 month visits, for only HR-ASD infants.
+
+```{r confound_effect_sizes}
+time_list <- c("V06",
+                  "V12",
+                  "V24")
+library(lsmeans)
+
+source("adj_cohens_d.r")
+percent_diff_matrix <- matrix(NA, nrow = length(brain_vars), ncol = length(time_list))
+rownames(percent_diff_matrix) <- brain_vars
+colnames(percent_diff_matrix) <- time_list
+
+adj_cohens_d_matrix <- matrix(NA, nrow = length(brain_vars), ncol = length(time_list))
+rownames(adj_cohens_d_matrix) <- brain_vars
+colnames(adj_cohens_d_matrix) <- time_list
+
+for(i in 1:length(brain_vars)){
+  frmla_val <-  
+      as.formula(paste0(brain_vars[i],
+             "~Pro_SCQgrp + Proband_Sex + Cand_Sex + Pro_Age_SCQ_m + AgeMRI"))
+   for(j in 1:length(time_list)){
+    formula = frmla_val
+    group_var = "Pro_SCQgrp"
+    data=summ_stats_data_long
+    filters=paste0("RiskGroup=='HR-ASD'","&",paste0("Visit==","'",time_list[j],"'")) 
+    digits = 2
+    
+    if(is.null(filters)==0){
+    data_subset <- data %>% filter_(filters)
+      } else {
+        data_subset <- data
+    }
+    lm_fit <- lm(formula, data=data_subset)
+    ls.m1 <- lsmeans(lm_fit, group_var)
+    
+    adj_cohens_d_fit <- adj_cohens_d(formula = frmla_val, 
+                                  group_var = "Pro_SCQgrp",
+                                  data=summ_stats_data_long,
+                                  filters=paste0("RiskGroup=='HR-ASD'","&",
+                                            paste0("Visit==","'",time_list[j],"'")))
+    
+    print(paste("Visit = ", time_list[j], sep=" "))
+    print(paste("Model = ", as.character(frmla_val), sep=""))
+    
+    percent_diff_matrix[i,j] = round(abs(diff(summary(ls.m1)$lsmean))/(sum(summary(ls.m1)$lsmean)/2)*100, digits)
+    adj_cohens_d_matrix[i,j] = adj_cohens_d_fit$adj_cohens_d
+   }
+}
+
+write.csv(percent_diff_matrix, file="Plots_Tables/SCQ_brain_percent_diff.csv")
+write.csv(adj_cohens_d_matrix, file="Plots_Tables/adj_cohens_d_matrix.csv")
+```
+
+# Mixed Models
+Now we consider a longitudinal regression analysis using mixed effect models.  These models are very similar to the linear regression models from before; the difference being that we include "random effects" in these models to tie together observations from the same infant.  We include a random intercept and a random slope for time as the sole random effects in all of the models.
+
+We provide the following output: regression parameter estimates, predicted trajectories for brain volume across time for each subject (colored by their diagnosis), and predicted trajectories for brain volume across Proband SCQ score for each subject at each time point (again colored by diagnosis).
+
+## Linear time effect
+To model time in the fixed effects (along with the aforementioned random intercept, slope) we include the following:
+
+1. Slope for age
+2. Interaction term between age and diagnosis
+
+and in the supplemental analyses we include the following as well:
+
+3. Interaction term between age and proband SCQ score
+4. Interaction term between age, diagnosis, and proband SCQ score
+
+with the rest of the fixed effects being those found in the linear regression models with confounding.  The use of the second and third interaction terms above allows the slope between proband score and brain measure to differ over time (become stronger/weaker as the infant ages), and for this differs to depend on diagnosis.
+
+```{r mixed_model_single_slope, results='asis'}
+summ_stats_data_long_mixed <-
+    summ_stats_data_long %>%
+      mutate(Visit=as.numeric(gsub("V","",Visit)),
+             Proband_Sex=fct_relevel(Proband_Sex, "Female"),
+             Cand_Sex=fct_relevel(Cand_Sex, "Female"))
+
+for(i in 1:length(brain_vars)){
+  frmla_val <-  
+      as.formula(paste0(brain_vars[i],
+             "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
+             AgeMRI+RiskGroup*AgeMRI+
+             Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex"))
+  
+  # Change optimizer
+  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
+  
+  mixed_fit <-
+  lme(frmla_val, 
+    data=summ_stats_data_long_mixed,
+    random = ~1+Visit|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+
+  coef_table_v0 <- 
+    summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
+  coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+  
+  ci_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 4, 2)
+  est_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, DF, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% 
+    save_kable(file=paste0("Plots_Tables/MixedModel_Estimates_",brain_vars[i],".png"))
+  
+  # Create table for Google Doc
+  coef_table$p_value_FDR <- NA
+  
+  sort_vec <- 
+    c("(Intercept)", "SCQ_Pro_Score", "Proband_SexFemale", "Cand_SexFemale", "RiskGroupHR-ASD",
+      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI", "SiteSEA", "SiteSTL", "SiteUNC",
+      "Pro_Age_SCQ_y",
+      "AgeMRI")
+  
+  sort_vec_fix <- c(sort_vec[which(sort_vec=="SCQ_Pro_Score")], sort_vec[-which(sort_vec=="SCQ_Pro_Score")])
+  write.csv(
+    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+      arrange(factor(Variable, levels=sort_vec_fix)), 
+              file=paste0("Plots_Tables/MixedModel_Estimates_",brain_vars[i],".csv"))
+  
+  write.csv(coef_table %>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/MixedModel_Estimates_Full_",brain_vars[i],".csv"))
+  
+  mixed_effect_data_complete <- 
+    data.frame(getData(mixed_fit), 
+               "predicted_value"=predict(mixed_fit, 
+                                         newdata = getData(mixed_fit)))
+  
+  
+time_plot <- 
+  ggplot(data=mixed_effect_data_complete, mapping=aes(x=Visit,
+                                          color=RiskGroup,
+                                          group=PSCID))+
+  geom_point(mapping=aes(y=predicted_value))+
+  # geom_point(mapping=
+  #              aes(y=eval(
+  #                parse(text=formula.tools::lhs(frmla_val)))))+
+  geom_line(mapping=aes(y=predicted_value))+
+  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+       title="Mixed model fitted values with diagnosis by visit interaction term\nand random slopes for visit")
+
+ggsave(filename=
+         paste0("Plots_Tables/MixedModel_TimeTrend_",
+                brain_vars[i],".png"), plot=time_plot)
+
+print(time_plot)
+
+# Also create cross sectional plots at each time point, with brain measure on x axis to compare to previous cross sectional plots
+for(j in 1:length(unique(mixed_effect_data_complete$Visit))){
+mixed_effect_data_complete_cross_sectional <-
+    mixed_effect_data_complete %>%
+      filter(Visit==unique(mixed_effect_data_complete$Visit)[j])
+
+scq_plot <- ggplot(data=mixed_effect_data_complete_cross_sectional, mapping=aes(x=SCQ_Pro_Score,color=RiskGroup))+
+  geom_point(mapping=aes(y=predicted_value))+
+  geom_smooth(mapping=aes(y=predicted_value,group=RiskGroup),
+              method = "lm")+
+  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+       title=paste0("Mixed model fitted values at ", unique(mixed_effect_data_complete$Visit)[j],
+                    " months\nwith diagnosis by visit interaction term\nand random slopes for visit"))
+
+ggsave(filename=
+         paste0("Plots_Tables/MixedModel_SCQTrend_",
+                unique(mixed_effect_data_complete$Visit)[j],
+                brain_vars[i],".png"), plot=scq_plot)
+
+print(scq_plot)
+}
+}
+```
+
+We also consider a spline modeling, with separate splines for each diagnostic group.  The knots are placed at visit points (6 months, 12 months, 24 months).  We only consider spline models for the "macro" scale brain measures (EACSF, TCV, TSA) as we see that compared to the linear mixed models, the splines do not significant new information.  This was determined by a asymptotic likelihood ratio test with the linear mixed model as the null model (as the linear and spline models are nested models), using the restricted log likelihoods for each model.  As before, the random effects consist of a random intercept and a random slope for age.
+
+## Spline time effect
+```{r mixed_model_spline, eval=FALSE}
+frmla_list <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
+                     V2VInd+V3VInd+V4VInd+
+                     RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
+                     SCQ_Pro_Score+
+                     SCQ_Pro_Score*RiskGroup+
+                     Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex,
+                   TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
+                     V2VInd+V3VInd+V4VInd+
+                     RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
+                     SCQ_Pro_Score+
+                     SCQ_Pro_Score*RiskGroup+
+                     Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex,
+                   TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
+                     V2VInd+V3VInd+V4VInd+
+                     RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
+                     SCQ_Pro_Score+
+                     SCQ_Pro_Score*RiskGroup+
+                     Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex)
+
+frmla_list_linear <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
+                            SCQ_Pro_Score+SCQ_Pro_Score*RiskGroup+
+                            Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex,
+                   TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+SCQ_Pro_Score+
+                     SCQ_Pro_Score*RiskGroup+
+                     Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex,
+                   TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
+                     SCQ_Pro_Score+
+                     SCQ_Pro_Score*RiskGroup+
+                     Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex)
+
+for(i in 1:length(frmla_list)){
+  summ_stats_data_long_mixed <-
+    summ_stats_data_long %>%
+      mutate(Visit=as.numeric(gsub("V","",Visit)))
+  
+  summ_stats_data_long_mixed$V2VInd <- as.numeric(6 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-6)
+  
+  summ_stats_data_long_mixed$V3VInd <- as.numeric(12 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-12)
+  
+  summ_stats_data_long_mixed$V4VInd <- as.numeric(24 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-24)
+  
+  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
+  
+  mixed_fit <-
+  lme(frmla_list[[i]], 
+    data=summ_stats_data_long_mixed,
+    random = ~1+AgeMRI|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+
+  print(frmla_list[[i]])
+  #summary(mixed_fit)
+  
+  # conduct loglikelihood test compared to non-spline model
+  mixed_fit_linear <- 
+    lme(frmla_list_linear[[i]], 
+    data=summ_stats_data_long_mixed,
+    random = ~1+AgeMRI|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+  
+  mixed_fit_loglike <- logLik(mixed_fit)
+  mixed_fit_loglike_linear <- logLik(mixed_fit_linear)
+
+  # compute asymptotic likelihood ratio stat
+  likelihood_ratio_test_stat <- as.numeric(-2*(mixed_fit_loglike_linear-mixed_fit_loglike))
+  loglike_pvalue <- pchisq(likelihood_ratio_test_stat, df=6)
+  
+  print(paste0("Likelihood Ratio Test: Test Stat = ",round(likelihood_ratio_test_stat, 2),", Df = 6, p-value = ",
+              round(loglike_pvalue, 3)))
+  
+  mixed_effect_data_complete <- 
+    data.frame(getData(mixed_fit), 
+               "predicted_value"=predict(mixed_fit, 
+                                         newdata = getData(mixed_fit)))
+}
+```
+
+# Supplemental Analyses
+## Count of observed imaging data
+First, we create a table of counts of available imaging data by time point, diagnosis.  This can be done be counting the number of non-missing values of the AgeMRI variable.
+
+```{r supp_table_obs_image}
+obs_imaging_table <- summ_stats_data_long %>%
+  group_by(Visit, RiskGroup) %>%
+  summarise(obs_count = sum(!is.na(AgeMRI))) %>%
+  spread(RiskGroup, obs_count) %>%
+  ungroup()
+
+obs_imaging_table$Total = rowSums(obs_imaging_table %>% select(`HR-Neg`, `HR-ASD`))
+obs_imaging_table <- rbind(obs_imaging_table, c("Total",colSums(obs_imaging_table %>% select(`HR-Neg`, `HR-ASD`, Total))))
+
+write.csv(obs_imaging_table, "Plots_Tables/supp_table_count_imaging.csv")
+```
+
+## Correlations between secondary brain regions and SCQ score
+```{r corr_SCQ_secondary}
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="SCQ_Pro_Score", x2=brain_vars, group="ASD", 
+                        fdr_vars=brain_vars[!brain_vars%in%c("EACSF","TCV","TSA")])
+corr_mat_Neg_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="SCQ_Pro_Score", x2=brain_vars, group="Neg", 
+                        fdr_vars=brain_vars[!brain_vars%in%c("EACSF","TCV","TSA")])
+write.csv(corr_mat_ASD_doc_form, file = "Plots_Tables/corr_mat_ASD_SQC_secondary.csv")
+write.csv(corr_mat_Neg_doc_form, file = "Plots_Tables/corr_mat_Neg_SQC_secondary.csv")
+```
+
+## Correlations between brain and Proband ADI-R Reciprocal Social Interaction Scores
+```{r supp_table_corr_brain_adir_soc}
+# Calc estimated correlations with 95% CIs
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_A_Tot", x2=c("TCV","TSA"), group="ASD", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+corr_mat_Neg_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_A_Tot", x2=c("TCV","TSA"), group="Neg", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+write.csv(corr_mat_ASD_doc_form, file = "Plots_Tables/corr_mat_ASD_ADIR_Soc_Primary.csv")
+write.csv(corr_mat_Neg_doc_form, file = "Plots_Tables/corr_mat_Neg_ADIR_Soc_Primary.csv")
+```
+
+```{r supp_table_corr_brain_adir_rrb}
+# Calc estimated correlations with 95% CIs
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_C_Tot", x2=c("TCV","TSA"), group="ASD", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+corr_mat_Neg_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_C_Tot", x2=c("TCV","TSA"), group="Neg", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+write.csv(corr_mat_ASD_doc_form, file = "Plots_Tables/corr_mat_ASD_ADIR_RRB_Primary.csv")
+write.csv(corr_mat_Neg_doc_form, file = "Plots_Tables/corr_mat_Neg_ADIR_RRB_Primary.csv")
+```
+
+```{r supp_table_corr_brain_adir_verbpro}
+# Calc estimated correlations with 95% CIs
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_BV_Tot", x2=c("TCV","TSA"), group="ASD", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+corr_mat_Neg_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long, x1="ADIR_Pro_BV_Tot", x2=c("TCV","TSA"), group="Neg", 
+                        fdr_vars=c("TCV","TSA")) %>%
+  mutate(Variable = factor(Variable, levels = c("TSA", "TCV"))) %>%
+  arrange(Variable, Time)
+
+write.csv(corr_mat_ASD_doc_form, file = "Plots_Tables/corr_mat_ASD_ADIR_VerbPro_Primary.csv")
+write.csv(corr_mat_Neg_doc_form, file = "Plots_Tables/corr_mat_Neg_ADIR_VerbPro_Primary.csv")
+```
+
+## Demographics by proband group
+```{r demo_table_SCQ}
+summ_stats_data_long_baseline_ASD <- summ_stats_data_long_baseline %>% 
+  filter(RiskGroup=="HR-ASD")
+
+baseline_summ_table <- tableone::CreateTableOne(data=summ_stats_data_long_baseline_ASD,
+                         strata="Pro_SCQgrp",
+                         vars=c("Cand_Sex", "Cand_Race", "Mother_Edu", "SCQ_Pro_Score",
+                                "ADOS_SevScore"))
+print(baseline_summ_table, showAllLevels = TRUE,
+      quote = FALSE, noSpaces = TRUE, printToggle = FALSE, exact=c("Cand_Race", "Mother_Edu"), includeNA = TRUE)
+
+print_summtable_obj <- print(baseline_summ_table, showAllLevels = TRUE,
+      quote = FALSE, noSpaces = TRUE, printToggle = FALSE, exact=c("Cand_Race", "Mother_Edu"), includeNA = TRUE)
+
+# Check h testing for ADOS, SQC
+t.test(formula = SCQ_Pro_Score~Pro_SCQgrp, data=summ_stats_data_long_baseline_ASD)
+t.test(formula = ADOS_SevScore~Pro_SCQgrp, data=summ_stats_data_long_baseline_ASD)
+
+## Save to a CSV file
+write.csv(print_summtable_obj, file="Plots_Tables/baseline_summ_table_ASD_bySCQ.csv")
+```
+
+## Correlations between brain measures and behavioral measures
+```{r corr_brain_behavior}
+# Calc estimated correlations with 95% CIs
+SA_VABS_data <- read.csv("Data/Sib_SCQ_VABS_Loris_15April2020.csv") %>%
+  select(PSCID, VABS_SA_SOC_STD)
+
+summ_stats_data_long_time_v24_brain <- 
+  merge(summ_stats_data_long, summ_stats_data_wide %>% 
+          select(PSCID, V24_ADOS_SevScore, V24_CSBS_Social_Comp, V24_VABS_SOC_SS)) %>%
+  merge(SA_VABS_data)
+
+brain_SA_VABS <- c(brain_vars, "VABS_SA_SOC_STD")
+
+corr_mat_ADOS_Doc_Form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_v24_brain, 
+                        visits=c(rep(list(c("V06", "V12", "V24")), length(brain_vars)),"V06"),
+                        x1="V24_ADOS_SevScore", x2=brain_SA_VABS, 
+                        group="ASD", fdr_vars=c("VABS_SA_SOC_STD","TCV","TSA"))
+
+corr_mat_CSBS_Doc_Form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_v24_brain,
+                        visits=c(rep(list(c("V06", "V12", "V24")), length(brain_vars)),"V06"),
+                        x1="V24_CSBS_Social_Comp", x2=brain_SA_VABS, 
+                        group="ASD", fdr_vars=c("VABS_SA_SOC_STD","TCV","TSA"))
+
+corr_mat_VABS_Doc_Form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_v24_brain, 
+                        visits=c(rep(list(c("V06", "V12", "V24")), length(brain_vars)),"V06"),
+                        x1="V24_VABS_SOC_SS", x2=brain_SA_VABS, 
+                        group="ASD", fdr_vars=c("VABS_SA_SOC_STD","TCV","TSA"))
+
+write.csv(corr_mat_ADOS_Doc_Form, file = "Plots_Tables/corr_mat_ADOS_Primary.csv")
+write.csv(corr_mat_CSBS_Doc_Form, file = "Plots_Tables/corr_mat_CSBS_Primary.csv")
+write.csv(corr_mat_VABS_Doc_Form, file = "Plots_Tables/corr_mat_VABS_Primary.csv")
+```
+
+## Linear Mixed Effects - Time Varying Associations
+Re-fit the mixed effects models in the main analyses with the following additions to the main effects:
+
+1. Interaction term between age and proband SCQ score
+2. Interaction term between age, diagnosis, and proband SCQ score
+
+The use of these interaction terms above allows the slope between proband score and brain measure to differ over time (become stronger/weaker as the infant ages), and for this differs to depend on diagnosis.
+
+```{r mixed_model_single_slope_time_int, results='asis'}
+summ_stats_data_long_mixed <-
+    summ_stats_data_long %>%
+      mutate(Visit=as.numeric(gsub("V","",Visit)))
+
+for(i in 1:length(brain_vars)){
+  frmla_val <-  
+      as.formula(paste0(brain_vars[i],
+             "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
+             AgeMRI+RiskGroup*AgeMRI+
+             AgeMRI+
+             SCQ_Pro_Score*AgeMRI+SCQ_Pro_Score*AgeMRI*RiskGroup+
+             Proband_Sex+Site+Pro_Age_SCQ_y+Cand_Sex"))
+  
+  # Change optimizer
+  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
+  
+  mixed_fit <-
+  lme(frmla_val, 
+    data=summ_stats_data_long_mixed,
+    random = ~1+Visit|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+
+  coef_table_v0 <- 
+    summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
+  coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+  
+  ci_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 5, 2)
+  est_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, DF, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% 
+    save_kable(file=paste0("Plots_Tables/MixedModel_Estimates_Supplement_",brain_vars[i],".png"))
+  
+  # Create table for Google Doc
+  coef_table$p_value_FDR <- NA
+  
+  sort_vec <- c("(Intercept)", "SCQ_Pro_Score", "Proband_SexFemale", "Cand_SexFemale", "RiskGroupHR-ASD",
+      "RiskGroupHR-ASD:SCQ_Pro_Score", "RiskGroupHR-ASD:AgeMRI", "SCQ_Pro_Score:AgeMRI",
+      "RiskGroupHR-ASD:SCQ_Pro_Score:AgeMRI",
+      "SiteSEA", "SiteSTL", "SiteUNC", "Pro_Age_SCQ_y",
+      "AgeMRI")
+  
+  write.csv(
+    coef_table %>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/MixedModel_Estimates_Supplement_",brain_vars[i],".csv"))
+  
+  mixed_effect_data_complete <- 
+    data.frame(getData(mixed_fit), 
+               "predicted_value"=predict(mixed_fit, 
+                                         newdata = getData(mixed_fit)))
+  
+  
+time_plot <- 
+  ggplot(data=mixed_effect_data_complete, mapping=aes(x=Visit,
+                                          color=RiskGroup,
+                                          group=PSCID))+
+  geom_point(mapping=aes(y=predicted_value))+
+  # geom_point(mapping=
+  #              aes(y=eval(
+  #                parse(text=formula.tools::lhs(frmla_val)))))+
+  geom_line(mapping=aes(y=predicted_value))+
+  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+       title="Mixed model fitted values with diagnosis by visit interaction term\nand random slopes for visit")
+
+ggsave(filename=
+         paste0("Plots_Tables/MixedModel_TimeTrend_Supplement_",
+                brain_vars[i],".png"), plot=time_plot)
+
+print(time_plot)
+
+# Also create cross sectional plots at each time point, with brain measure on x axis to compare to previous cross sectional plots
+for(j in 1:length(unique(mixed_effect_data_complete$Visit))){
+mixed_effect_data_complete_cross_sectional <-
+    mixed_effect_data_complete %>%
+      filter(Visit==unique(mixed_effect_data_complete$Visit)[j])
+
+scq_plot <- ggplot(data=mixed_effect_data_complete_cross_sectional, mapping=aes(x=SCQ_Pro_Score,color=RiskGroup))+
+  geom_point(mapping=aes(y=predicted_value))+
+  geom_smooth(mapping=aes(y=predicted_value,group=RiskGroup),
+              method = "lm")+
+  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+       title=paste0("Mixed model fitted values at ", unique(mixed_effect_data_complete$Visit)[j],
+                    " months\nwith diagnosis by visit interaction term\nand random slopes for visit"))
+
+ggsave(filename=
+         paste0("Plots_Tables/MixedModel_SCQTrend_Supplement_",
+                unique(mixed_effect_data_complete$Visit)[j],
+                brain_vars[i],".png"), plot=scq_plot)
+
+print(scq_plot)
+}
+}
+```
+
+```{r scq_brain_scatterplots_w_atyp}
+# Scatterplots: SCQ by various brain measures by visit and diagnosis group,
+# including Atyp
+summ_stats_data_long_time_edit_atyp <-
+  summ_stats_data_long_time %>%
+  mutate(DX_Subgroups=
+           plyr::revalue(DX_Subgroups, 
+                   c("YES (DSM_IV questions 4a/4b is Yes)"="ASD_pos",
+                     "NO (DSM_IV questions 4a/4b is no and not atypical)"="typical"))) %>%
+  mutate(DX_Subgroups=ifelse(grepl("ATYPICAL",DX_Subgroups),"atypical",DX_Subgroups),
+         RiskGroupAtyp = ifelse(RiskGroup=="HR-ASD", "HR-ASD",
+                                ifelse(RiskGroup=="HR-Neg"&DX_Subgroups=="typical","HR-Typ",
+                                       ifelse(RiskGroup=="HR-Neg"&DX_Subgroups=="atypical","HR-Atyp",
+                                              ifelse(is.na(RiskGroup)==1,NA,"LR")))))
+
+scattergg <- list()
+for(i in 1:length(brain_vars)){
+  scattergg[[i]] <- ggplot(data=summ_stats_data_long_time_edit_atyp, 
+         mapping=aes_string(x="SCQ_Pro_Score", 
+                     y=brain_vars[i],
+                     color="RiskGroupAtyp"))+
+    geom_point()+
+    geom_smooth(method="lm", se=FALSE)+
+    facet_wrap(~Visit)+
+    labs(title = 
+           paste0("Scatterplot of SCQ Proband Score by sibling ", 
+                  brain_vars[i],
+                  " by visit\ncolored by diagnosis group"),
+         y=brain_vars[i])+
+    theme_bw()
+  print(scattergg[[i]])
+}
+names(scattergg) <- paste0(brain_vars, "_by_ASD_Typ_Atyp")
+
+scattergg_primary <- which(names(scattergg)%in%
+                             c("EACSF_by_ASD_Typ_Atyp","TCV_by_ASD_Typ_Atyp",
+                               "TSA_by_ASD_Typ_Atyp", "CCSplenium_by_ASD_Typ_Atyp"))
+ggarrange(plotlist=scattergg[scattergg_primary],
+          ncol=2, nrow=2, common.legend = TRUE, legend="bottom")
+ggsave("Plots_Tables/corr_plot_SCQ_ASD_Atyp_Typ.jpg", scale=2.5)
+
+# Calc estimated correlations with 95% CIs, p-values
+corr_calc <- function(vars, time, dataset){
+  data_subset_time <- dataset %>%
+    filter(Visit==time)
+  
+  data_subset_time_ASD <- data_subset_time %>% 
+    filter(RiskGroupAtyp=="HR-ASD")
+  
+  data_subset_time_typ <- data_subset_time %>% 
+    filter(RiskGroupAtyp=="HR-Typ")
+  
+  data_subset_time_atyp <- data_subset_time %>% 
+    filter(RiskGroupAtyp=="HR-Atyp")
+  
+  return_obj <- list(
+    "ASD"=list(cor(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time_ASD[[vars[1]]], data_subset_time_ASD[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    
+    "Typ"=list(cor(data_subset_time_typ[[vars[1]]], data_subset_time_typ[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time_typ[[vars[1]]], data_subset_time_typ[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time_typ[[vars[1]]], data_subset_time_typ[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time_typ[[vars[1]]], data_subset_time_typ[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    
+    "Atyp"=list(cor(data_subset_time_atyp[[vars[1]]], data_subset_time_atyp[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time_atyp[[vars[1]]], data_subset_time_atyp[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time_atyp[[vars[1]]], data_subset_time_atyp[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time_atyp[[vars[1]]], data_subset_time_atyp[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    
+    "Sample"=list(cor(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs"),
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$conf.int,
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$p.value,
+      cor.test(data_subset_time[[vars[1]]], data_subset_time[[vars[2]]],
+      use="pairwise.complete.obs")$parameter+2),
+    "Variables"=paste(vars, collapse=" by "))
+
+  return(return_obj)
+}
+
+corr_table_google_doc <- function(dataset, x1, x2, 
+                                  visits=rep(list(c("V06", "V12", "V24")),
+                                             length(x2)), 
+                                  group, fdr_method="fdr", fdr_vars,
+                                  plot_form=FALSE){
+  vars_corr_v2 <- expand.grid(x1, unlist(mapply(rep, x2, lengths(visits))))
+  
+  corr_mat <- data.frame(matrix(nrow=dim(vars_corr_v2)[1], 
+                       ncol=5))
+  
+  corr_mat[,1] <- unlist(visits)
+  
+  corr_mat[,2] <- vars_corr_v2[,2]
+  names(corr_mat) <- c("Time", "Variable", "n", "Estimate","p_value")
+  
+  for(i in 1:dim(vars_corr_v2)[1]){
+    # sample size
+    corr_mat[i,3]=corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[4]]
+      
+    # estimate, CI
+    corr_mat[i,4]=paste0(
+      round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[1]],2), ": (",
+      paste(round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                            time=corr_mat[i,1], dataset=dataset)[[group]][[2]], 2),
+            collapse=", "),
+      ")")
+    # p-value
+    corr_mat[i,5]=round(corr_calc(vars=as.matrix(vars_corr_v2[i,]), 
+                      time=corr_mat[i,1], dataset=dataset)[[group]][[3]],3)
+  }
+  corr_mat <- corr_mat %>% arrange(Variable)
+  
+  # Create aternative format for use in colored table indicating sign. associations
+  if(plot_form==TRUE){
+    corr_mat_v2 <- corr_mat %>%
+      mutate(Estimate_pval = paste0(Estimate,", ", p_value)) %>%
+      select(Time, Variable, Estimate_pval)
+    
+    corr_mat_flip <- corr_mat_v2 %>%
+      spread(Variable,Estimate_pval)
+    
+    color_cols <- corr_mat %>%
+      filter(p_value<0.05) %>%
+      select(Variable) %>% 
+      unique() %>%
+      unlist()
+
+    color_cols_index <- match(color_cols, names(corr_mat_flip))
+    return(list("table"=corr_mat,
+                "table_flip"=corr_mat_flip,
+                "sig_markers"=color_cols_index))
+  } else {
+    
+    # Correct p-values for multiple comps using B+Y 2001 based on FDR
+    FDR_correct_pvals <- 
+  p.adjust(p=corr_mat$p_value[corr_mat$Variable%in%fdr_vars], 
+           method=fdr_method)
+    
+    corr_mat$p_value_FDR <- NA
+  corr_mat$p_value_FDR[corr_mat$Variable%in%fdr_vars] <- 
+    round(FDR_correct_pvals,3)
+  
+  # Make CI a separate column
+  corr_mat <- corr_mat %>% 
+    separate(Estimate, into=c("Estimate", "CI"), sep = ": ")
+
+    return(corr_mat)
+  }
+}
+
+# kable(corr_mat_Neg_flip,"html",
+#       caption="Correations: HR-Neg Group") %>%
+#   kable_styling() %>%
+#   column_spec(color_cols_Neg_index, 
+#               bold = T, color = "white", background = "red") %>%
+#   save_kable("corr_mat_Neg.jpeg")
+
+# kable(corr_mat_ASD_flip,
+#       caption="Correations: HR-ASD Group") %>%
+#   kable_styling() %>%
+#   column_spec(color_cols_ASD_index, 
+#               bold = T, color = "white", background = "red") %>%
+#   save_kable("corr_mat_ASD.png")
+
+# For Google Doc table
+corr_mat_ASD_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_edit_atyp, 
+                        x1="SCQ_Pro_Score", x2=brain_vars, group="ASD", 
+                        fdr_vars=c("EACSF","TCV","TSA", "CCSplenium")) %>%
+  mutate(Variable=forcats::fct_relevel(factor(Variable), 
+                                       "TSA", "TCV", "EACSF", "CCSplenium")) %>%
+  arrange(Variable, Time)
+
+corr_mat_Typ_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_edit_atyp, 
+                        x1="SCQ_Pro_Score", x2=brain_vars, group="Typ", 
+                        fdr_vars=c("EACSF","TCV","TSA", "CCSplenium")) %>%
+  mutate(Variable=forcats::fct_relevel(factor(Variable), 
+                                       "TSA", "TCV", "EACSF", "CCSplenium")) %>%
+  arrange(Variable, Time)
+
+corr_mat_Atyp_doc_form <- 
+  corr_table_google_doc(dataset=summ_stats_data_long_time_edit_atyp, 
+                        x1="SCQ_Pro_Score", x2=brain_vars, group="Atyp", 
+                        fdr_vars=c("EACSF","TCV","TSA", "CCSplenium")) %>%
+  mutate(Variable=forcats::fct_relevel(factor(Variable), 
+                                       "TSA", "TCV", "EACSF", "CCSplenium")) %>%
+  arrange(Variable, Time)
+
+write.csv(corr_mat_ASD_doc_form, 
+          file = "Plots_Tables/corr_mat_ASD_sensitivity_SQC_Primary.csv")
+write.csv(corr_mat_Typ_doc_form, file = "Plots_Tables/corr_mat_Typ_SCQ_Primary.csv")
+write.csv(corr_mat_Atyp_doc_form,
+          file = "Plots_Tables/corr_mat_Atyp_SCQ_Primary.csv")
+
+# Print out table as images to send to Jessica
+corr_mat_ASD_doc_form_edit <- corr_mat_ASD_doc_form %>%
+  mutate(group="ASD") %>%
+  select(group, everything())
+
+corr_mat_Typ_doc_form_edit <- corr_mat_Typ_doc_form %>%
+  mutate(group="Typ") %>%
+  select(group, everything())
+
+corr_mat_Atyp_doc_form_edit <- corr_mat_Atyp_doc_form %>%
+  mutate(group="Atyp") %>%
+  select(group, everything())
+
+corr_mat_ASD_Typ_Atyp_edit <- rbind(corr_mat_ASD_doc_form_edit,
+                                    corr_mat_Typ_doc_form_edit,
+                                    corr_mat_Atyp_doc_form_edit) %>%
+  filter(is.na(p_value_FDR)==0)
+
+sig_indexes <- which(corr_mat_ASD_Typ_Atyp_edit$p_value<0.05)
+
+kable(corr_mat_ASD_Typ_Atyp_edit%>%arrange(group, Variable, Time)) %>% 
+  kable_styling()%>%
+  collapse_rows(columns = 1, valign = "top") %>%
+  row_spec(row=sig_indexes, background="blue", color="white") %>%
+  save_kable("Plots_Tables/corr_table_primary_ASD_Atyp_Typ.jpg")
+
+corr_mat_ASD_Typ_Atyp_edit %>%
+  arrange(group, Variable, Time) %>%
+  write.csv("Plots_Tables/corr_mat_ASD_Typ_Atyp_edit.csv")
+```
+
+
+## Mediation analysis
+We are now going to assess if infant cortical surface area is a mediator between the effect of proband SCQ score on sibling diagnosis, at 12 months of age for the sibling.  Given the outcome is binary diagnosis (ASD vs Negative), we use a logistic regression model.
+
+The following models are used to assess the mediation of surface area (TSA) at 12 months:
+
+1) $TSA=\beta_0+\beta_1SCQProband+\beta_zZ+\epsilon$
+
+2) $\mbox{logit}(p_{ASD|TSA,SCQ,Z})=\beta_0+\beta_1TSA+\beta_2SCQProband+\beta_zZ$
+
+where $p_{ASD|TSA,SCQ,Z}=\Pr(Diagnosis=ASD|TSA,SCQ,Z)$, that is the probability of an ASD diagnosis for the infant given their surface area at 12 months, sibling SCQ total score, and potential confounders, where $Z$ is shorthand for the set of potential confounders (same as were used above in the mixed model analyses).  These models are used to estimate the usual direct, indirect, and total effects based on the models' regression parameter estimates.  To avoid distributional assumptions about the distribution of these estimators, we use the nonparametric bootstrap (sample data with replacement and compute estimates) with 1000 bootstrap resamples to compute 95% CIs using the 2.5th and 97.5th percentiles as the CI endpoints.
+
+The association between SCQ and diagnosis are thus decomposed into
+
+1) Total effect: assocation between SCQ and diagnosis, without any controlling
+
+2) Direct effect: association between SCQ and diagnosis, controlling for TSA
+
+3) Indirect effect: Direct - Total, how SCQ associates with diagnosis through it's association with TSA
+
+```{r sa_scq_mediate}
+summ_stats_data_long_12m <- 
+  summ_stats_data_long %>%
+  filter(Visit=="V12")
+
+med_model_fit_tsa_scq <-
+  lm(formula=TSA~SCQ_Pro_Score+
+       Proband_Sex+Site+AgeMRI+Pro_Age_SCQ_y+Cand_Sex,
+     data=summ_stats_data_long_12m)
+
+med_model_fit_logistic_asd <- 
+  glm(formula=RiskGroup~SCQ_Pro_Score+TSA+
+  Proband_Sex+Site+AgeMRI+Pro_Age_SCQ_y+Cand_Sex,
+  data=summ_stats_data_long_12m,
+  family=binomial(link="logit"))
+
+med_analysis_fit <-
+  mediate(model.m=med_model_fit_tsa_scq, model.y=med_model_fit_logistic_asd,
+          sims=1000, boot=TRUE, boot.ci.type = "perc",
+          treat = "SCQ_Pro_Score",
+          mediator = "TSA",
+          treat.value=mean(summ_stats_data_long_12m$SCQ_Pro_Score, na.rm=TRUE)-1,
+          control.value=mean(summ_stats_data_long_12m$SCQ_Pro_Score, na.rm=TRUE)-3)
+
+# Can see proportion mediated no matter what you use as treat, control due to no
+# treatment, mediator interaction
+
+summary(med_analysis_fit)
+plot(med_analysis_fit)
+
+summary(med_model_fit_logistic_asd)
+```
