@@ -502,19 +502,18 @@ for(i in 1:length(brain_vars)){
 ```
 
 # Linear Regression-Confounding Variables
-Now, we conduct the same linear regression analysis as was done before but also include a set of possible confouding variables for eahch model.  The variables are: study site for infant, age of the infant at MRI scan, and sex of infant.  We print the same output as in the previous linear regrsssion analysis.
+Now, we conduct the same linear regression analysis as was done before but also include a set of possible confouding variables for eahch model.  The variables are: study site for infant, age of the infant at MRI scan, sex of infant, and proband IQ (VABS ABC score).  We print the same output as in the previous linear regression analysis.
 ```{r linear_reg_confound, results='asis'}
 time_list <- c("V06",
                   "V12",
                   "V24")
-
 
 for(i in 1:length(brain_vars)){
    for(j in 1:length(time_list)){
     frmla_val <-  
       as.formula(paste0(brain_vars[i],
              "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
-                     Site+AgeMRI+Cand_Sex"))
+                     Site+AgeMRI+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
      
     fit <- lm_fit_calc(frmla_val, time_list[j])
     print(paste("Visit = ", time_list[j], sep=" "))
@@ -569,7 +568,7 @@ colnames(adj_cohens_d_matrix) <- time_list
 for(i in 1:length(brain_vars)){
   frmla_val <-  
       as.formula(paste0(brain_vars[i],
-             "~Pro_SCQgrp + Cand_Sex + AgeMRI"))
+             "~Pro_SCQgrp + Cand_Sex + AgeMRI + Site + VABS_Pro_ABC_SS"))
    for(j in 1:length(time_list)){
     formula = frmla_val
     group_var = "Pro_SCQgrp"
@@ -619,7 +618,7 @@ and in the supplemental analyses we include the following as well:
 3. Interaction term between age and proband SCQ score
 4. Interaction term between age, diagnosis, and proband SCQ score
 
-with the rest of the fixed effects being those found in the linear regression models with confounding.  The use of the second and third interaction terms above allows the slope between proband score and brain measure to differ over time (become stronger/weaker as the infant ages), and for this differs to depend on diagnosis.
+with the rest of the fixed effects being those found in the linear regression models with confounding.  The use of the second and third interaction terms above allows the slope between proband score and brain measure to differ over time (become stronger/weaker as the infant ages), and for this difference to depend on diagnosis.
 
 ```{r mixed_model_single_slope, results='asis'}
 summ_stats_data_long_mixed <-
@@ -628,12 +627,16 @@ summ_stats_data_long_mixed <-
              Proband_Sex=fct_relevel(Proband_Sex, "Female"),
              Cand_Sex=fct_relevel(Cand_Sex, "Female"))
 
+summ_stats_data_long_mixed %>% 
+  group_by(RiskGroup) %>% 
+  summarise(corr=cor(SCQ_Pro_Score, VABS_Pro_ABC_SS, use = "pairwise.complete.obs"))
+
 for(i in 1:length(brain_vars)){
   frmla_val <-  
       as.formula(paste0(brain_vars[i],
              "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
              AgeMRI+RiskGroup*AgeMRI+
-             Site+Cand_Sex"))
+             Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
   
   # Change optimizer
   ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
@@ -671,11 +674,14 @@ for(i in 1:length(brain_vars)){
   coef_table$p_value_FDR <- NA
   
   sort_vec <- 
-    c("(Intercept)", "SCQ_Pro_Score", "Cand_SexMale", "RiskGroupHR-ASD",
-      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI", "SiteSEA", "SiteSTL", "SiteUNC","AgeMRI")
+    c("(Intercept)", "SCQ_Pro_Score", "VABS_Pro_ABC_SS", "Cand_SexMale", 
+      "RiskGroupHR-ASD",
+      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI", 
+      "RiskGroupHR-ASD:VABS_Pro_ABC_SS",
+      "SiteSEA", "SiteSTL", "SiteUNC","AgeMRI")
   
   write.csv(
-    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept|VABS"),]%>%
       arrange(factor(Variable, levels=sort_vec)), 
               file=paste0("Plots_Tables/MixedModel_Estimates_",brain_vars[i],".csv"))
   
@@ -740,30 +746,30 @@ frmla_list <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex,
+                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
                    TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      V2VInd+V3VInd+V4VInd+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex,
+                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
                    TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      V2VInd+V3VInd+V4VInd+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex)
+                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
 
 frmla_list_linear <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                             SCQ_Pro_Score+SCQ_Pro_Score*RiskGroup+
-                            Site+Cand_Sex,
+                            Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
                    TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex,
+                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
                    TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex)
+                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
 
 for(i in 1:length(frmla_list)){
   summ_stats_data_long_mixed <-
@@ -990,7 +996,7 @@ for(i in 1:length(brain_vars)){
              AgeMRI+RiskGroup*AgeMRI+
              AgeMRI+
              SCQ_Pro_Score*AgeMRI+SCQ_Pro_Score*AgeMRI*RiskGroup+
-             Site+Cand_Sex"))
+             Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
   
   # Change optimizer
   ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
@@ -1027,8 +1033,11 @@ for(i in 1:length(brain_vars)){
   # Create table for Google Doc
   coef_table$p_value_FDR <- NA
   
-  sort_vec <- c("(Intercept)", "SCQ_Pro_Score", "Cand_SexMale", "RiskGroupHR-ASD",
-      "RiskGroupHR-ASD:SCQ_Pro_Score", "RiskGroupHR-ASD:AgeMRI", "SCQ_Pro_Score:AgeMRI",
+  sort_vec <- c("(Intercept)", "SCQ_Pro_Score", "VABS_Pro_ABC_SS",
+                "Cand_SexMale", "RiskGroupHR-ASD",
+      "RiskGroupHR-ASD:SCQ_Pro_Score", "RiskGroupHR-ASD:AgeMRI",
+      "RiskGroupHR-ASD:VABS_Pro_ABC_SS",
+      "SCQ_Pro_Score:AgeMRI",
       "RiskGroupHR-ASD:SCQ_Pro_Score:AgeMRI",
       "SiteSEA", "SiteSTL", "SiteUNC",
       "AgeMRI")
@@ -1360,11 +1369,11 @@ summ_stats_data_long_12m <-
 med_model_fit_tsa_scq <-
   lm(formula=TSA~SCQ_Pro_Score+
        Site+AgeMRI+Cand_Sex,
-     data=summ_stats_data_long_12m)
+     data=summ_stats_data_long_12m+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
 
 med_model_fit_logistic_asd <- 
   glm(formula=RiskGroup~SCQ_Pro_Score+TSA+
-  Site+AgeMRI+Cand_Sex,
+  Site+AgeMRI+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
   data=summ_stats_data_long_12m,
   family=binomial(link="logit"))
 
