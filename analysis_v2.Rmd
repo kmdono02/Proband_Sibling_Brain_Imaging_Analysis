@@ -19,6 +19,7 @@ library(kableExtra)
 library(formula.tools)
 library(nlme)
 library(ggpubr)
+library(DiagrammeR)
 ```
 
 # Introduction
@@ -625,7 +626,10 @@ summ_stats_data_long_mixed <-
     summ_stats_data_long %>%
       mutate(Visit=as.numeric(gsub("V","",Visit)),
              Proband_Sex=fct_relevel(Proband_Sex, "Female"),
-             Cand_Sex=fct_relevel(Cand_Sex, "Female"))
+             Cand_Sex=fct_relevel(Cand_Sex, "Female"),
+             SCQ_Pro_Score = SCQ_Pro_Score-mean(SCQ_Pro_Score, na.rm=TRUE),
+             AgeMRI = AgeMRI - 6,
+             VABS_Pro_ABC_SS = VABS_Pro_ABC_SS-mean(VABS_Pro_ABC_SS, na.rm=TRUE))
 
 summ_stats_data_long_mixed %>% 
   group_by(RiskGroup) %>% 
@@ -1392,4 +1396,615 @@ summary(med_analysis_fit)
 plot(med_analysis_fit)
 
 summary(med_model_fit_logistic_asd)
+```
+
+## Eye gaze analysis
+It is hypothesized that eye gaze (recorded by the CSBS) is associated with the development of the splenium and right MOG surface area (ROI 48).  We test these hypothises using linear mixed models with the same random effects (intercept and slope for age) and confounders (site, sex, age), and test for group differences using a group by region interaction term.  We include the low risk negative group as a control to test for the impact of genetic risk for ASD.  We also include analyses for brain regions hypothesized to be independent of eye gaze (ROI 44, ROI 41, ROI 08) to assess the specificity of these associations.
+
+First, we plot scatterplots with lines of best fit between the 24 month CSBS eye gaze and the 6, 12, 24 month brain measures, colored by group (LR-negative, HR-negative, HR-ASD).
+
+```{r eye_gazedatamangage}
+## LR data
+LR_eyegaze_data <- 
+  read_csv(file = "Data/LR_Neg_CSBS_SA_Splenium_30Nov2020.csv") %>%
+  plyr::rename(c("V06_MRI_CandAge"="V06_AgeMRI",
+                 "V12_MRI_CandAge"="V12_AgeMRI",
+                 "V24_MRI_CandAge"="V24_AgeMRI",
+                 "TCV_V06"="V06_TCV",
+                 "TCV_V12"="V12_TCV",
+                 "TCV_V24"="V24_TCV",
+                 "TSA_V06"="V06_TSA",
+                 "TSA_V12"="V12_TSA",
+                 "TSA_V24"="V24_TSA",
+                 "CCSplenium_V06"="V06_CCSplenium",
+                 "CCSplenium_V12"="V12_CCSplenium",
+                 "CCSplenium_V24"="V24_CCSplenium",
+                 "ROI08_V06"="V06_ROI08",
+                 "ROI08_V12"="V12_ROI08",
+                 "ROI08_V24"="V24_ROI08",
+                 "ROI41_V06"="V06_ROI41",
+                 "ROI41_V12"="V12_ROI41",
+                 "ROI41_V24"="V24_ROI41",
+                 "ROI44_V06"="V06_ROI44",
+                 "ROI44_V12"="V12_ROI44",
+                 "ROI44_V24"="V24_ROI44",
+                 "ROI48_V06"="V06_ROI48",
+                 "ROI48_V12"="V12_ROI48",
+                 "ROI48_V24"="V24_ROI48")) %>%
+  mutate(CSBS_EyeGaze_std_V24 = V24_CSBS_EyeGaze_std) %>%
+  select(-CandID)
+
+vars_to_convert <- names(LR_eyegaze_data[grepl("V06|V12|V24",
+                                              names(LR_eyegaze_data))])
+vars_to_convert <- vars_to_convert[vars_to_convert!="CSBS_EyeGaze_std_V24"]
+
+LR_eyegaze_data_long <- 
+  LR_eyegaze_data %>%
+  gather(variable, var_value, vars_to_convert) %>%
+  separate(variable,c("Visit","Variable"),sep=4) %>%
+  spread(key=Variable, value=var_value) %>%
+  mutate(Visit=gsub("_","",Visit)) %>%
+  arrange(PSCID, Visit) %>%
+  select(PSCID, Visit, everything())
+
+brain_vars_gaze <- 
+  c("CCSplenium",
+    "ROI08", "ROI41", "ROI44", "ROI48"
+    )
+
+csbs_vars <-
+  names(LR_eyegaze_data_long)[grepl("CSBS", names(LR_eyegaze_data_long))]
+csbs_num_vars <-
+  csbs_vars[which(!(csbs_vars=="CSBS_Admin"|csbs_vars=="CSBS_Validity"))]
+
+# Make sure all brains vars, gaze vars, age are numeric
+LR_eyegaze_data_long[,c(brain_vars_gaze, csbs_num_vars, "AgeMRI")] <- 
+  lapply(LR_eyegaze_data_long[,c(brain_vars_gaze, csbs_num_vars, "AgeMRI")], 
+         as.numeric)
+
+# Remove std from names
+names(LR_eyegaze_data_long) <- 
+  gsub("_std", "", names(LR_eyegaze_data_long), ignore.case = TRUE)
+
+###############################
+
+csbs_to_keep <- 
+  which(grepl("eyegaze", names(LR_eyegaze_data),
+                               ignore.case = TRUE))
+others_to_keep <- which(!grepl("csbs", names(LR_eyegaze_data),
+                               ignore.case = TRUE))
+vars_to_keep <- 
+  gsub("_std", "", names(LR_eyegaze_data)[c(others_to_keep, csbs_to_keep)],
+       ignore.case = TRUE)
+  
+## HR Data
+HR_eyegaze_data <- 
+  data %>%
+  plyr::rename(c("AgeMRI_V06"="V06_AgeMRI",
+                 "AgeMRI_V12"="V12_AgeMRI",
+                 "AgeMRI_V24"="V24_AgeMRI",
+                 "TCV_V06"="V06_TCV",
+                 "TCV_V12"="V12_TCV",
+                 "TCV_V24"="V24_TCV",
+                 "TSA_V06"="V06_TSA",
+                 "TSA_V12"="V12_TSA",
+                 "TSA_V24"="V24_TSA",
+                 "CCSplenium_V06"="V06_CCSplenium",
+                 "CCSplenium_V12"="V12_CCSplenium",
+                 "CCSplenium_V24"="V24_CCSplenium",
+                 "ROI08_V06"="V06_ROI08",
+                 "ROI08_V12"="V12_ROI08",
+                 "ROI08_V24"="V24_ROI08",
+                 "ROI41_V06"="V06_ROI41",
+                 "ROI41_V12"="V12_ROI41",
+                 "ROI41_V24"="V24_ROI41",
+                 "ROI44_V06"="V06_ROI44",
+                 "ROI44_V12"="V12_ROI44",
+                 "ROI44_V24"="V24_ROI44",
+                 "ROI48_V06"="V06_ROI48",
+                 "ROI48_V12"="V12_ROI48",
+                 "ROI48_V24"="V24_ROI48"
+                 )) %>%
+    mutate(CSBS_EyeGaze_V24 = V24_CSBS_EyeGaze) %>%
+  select(vars_to_keep)
+
+vars_to_convert <- names(HR_eyegaze_data[grepl("V06|V12|V24",
+                                              names(HR_eyegaze_data))])
+vars_to_convert <- vars_to_convert[vars_to_convert!="CSBS_EyeGaze_V24"]
+
+HR_eyegaze_data_long <- 
+  HR_eyegaze_data %>%
+  gather(variable, var_value, vars_to_convert) %>%
+  separate(variable,c("Visit","Variable"),sep=4) %>%
+  spread(key=Variable, value=var_value) %>%
+  mutate(Visit=gsub("_","",Visit)) %>%
+  arrange(PSCID, Visit) %>%
+  select(PSCID, Visit, everything())
+
+csbs_vars <- names(HR_eyegaze_data_long)[grepl("CSBS", 
+                                               names(HR_eyegaze_data_long))]
+
+# Make sure all brains vars, gaze vars, age are numeric
+HR_eyegaze_data_long[,c(brain_vars_gaze, csbs_vars, "AgeMRI")] <- 
+  lapply(HR_eyegaze_data_long[,c(brain_vars_gaze, csbs_vars, "AgeMRI")], 
+         as.numeric)
+
+## Now bind together
+LR_eyegaze_data_long_reduce <-
+  LR_eyegaze_data_long %>%
+  select(names(HR_eyegaze_data_long))
+
+eye_gaze_long_full <- 
+  rbind(HR_eyegaze_data_long, LR_eyegaze_data_long_reduce) %>%
+  mutate(RiskGroup = relevel(factor(RiskGroup), ref="LR-Neg"))
+```
+
+```{r eye_gaze_corr}
+# Scatterplots: Eye gaze by various brain measures by visit and diagnosis group
+for(i in 1:length(brain_vars_gaze)){
+  scattergg <- ggplot(data=eye_gaze_long_full, 
+         mapping=aes_string(x="CSBS_EyeGaze_V24", 
+                     y=brain_vars_gaze[i],
+                     color="RiskGroup"))+
+    geom_point()+
+    geom_smooth(method="lm", se=FALSE)+
+    facet_wrap(~Visit)+
+    labs(title = 
+           paste0("Scatterplot of CSBS Eye Gaze at 24 months by ", 
+                  brain_vars_gaze[i],
+                  " by visit\ncolored by diagnosis"),
+         y=brain_vars_gaze[i])
+  print(scattergg)
+  ggsave(filename = paste0("Plots_Tables/EyeGaze_scatterplot_", 
+                           brain_vars_gaze[i], ".png"),
+         limitsize = FALSE, scale=2.5)
+}
+```
+
+Then we dig further using the linear mixed models
+
+```{r eye_gaze_mixed_model}
+# Using spline-like time by eye gaze interaction to reflect changing slopes over time
+eye_gaze_long_full <-
+  eye_gaze_long_full %>%
+  mutate(V00_V06_ind = ifelse(0<=AgeMRI & AgeMRI<6, 1,
+                              ifelse(is.na(AgeMRI)==1, NA, 0)),
+         V06_V12_ind = ifelse(6<=AgeMRI & AgeMRI<12, 1,
+                              ifelse(is.na(AgeMRI)==1, NA, 0)),
+         V12_V24_ind = ifelse(12<=AgeMRI & AgeMRI<24, 1,
+                              ifelse(is.na(AgeMRI)==1, NA, 0)),
+         V24_plus_ind = ifelse(24<=AgeMRI, 1,
+                              ifelse(is.na(AgeMRI)==1, NA, 0)))
+
+# eye_gaze_long_full <-
+#   eye_gaze_long_full %>%
+#   mutate(V06_ind = ifelse(Visit=="V06", 1,
+#                               ifelse(is.na(Visit)==1, NA, 0)),
+#          V12_ind = ifelse(Visit=="V12", 1,
+#                               ifelse(is.na(Visit)==1, NA, 0)),
+#          V24_ind = ifelse(Visit=="V24", 1,
+#                               ifelse(is.na(Visit)==1, NA, 0)))
+
+for(i in 1:length(brain_vars_gaze)){
+  frmla_val <-
+      as.formula(paste0(brain_vars_gaze[i],
+             "~RiskGroup", "+CSBS_EyeGaze_V24",
+             "+V06_V12_ind+V12_V24_ind+V24_plus_ind",
+             "+V06_V12_ind*CSBS_EyeGaze_V24 + V12_V24_ind*CSBS_EyeGaze_V24 +
+             V24_plus_ind*CSBS_EyeGaze_V24",
+             "+RiskGroup*", "CSBS_EyeGaze_V24",
+             "+V06_V12_ind*RiskGroup*CSBS_EyeGaze_V24 + V12_V24_ind*RiskGroup*CSBS_EyeGaze_V24 +
+             V24_plus_ind*RiskGroup*CSBS_EyeGaze_V24",
+             "+AgeMRI+RiskGroup*AgeMRI+
+             Site+Cand_Sex"))
+  
+  # frmla_val <-  
+  #     as.formula(paste0(brain_vars_gaze[i],
+  #            "~RiskGroup", "+CSBS_EyeGaze_V24",
+  #            "+V12_ind+V24_ind",
+  #            "+V12_ind*CSBS_EyeGaze_V24 +
+  #            V24_ind*CSBS_EyeGaze_V24",
+  #            "+RiskGroup*", "CSBS_EyeGaze_V24", 
+  #            "+V12_ind*RiskGroup*CSBS_EyeGaze_V24 +
+  #            V24_ind*RiskGroup*CSBS_EyeGaze_V24",
+  #            "+AgeMRI+RiskGroup*AgeMRI+
+  #            Site+Cand_Sex"))
+  
+  # Change optimizer
+  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
+  
+  mixed_fit <-
+  lme(frmla_val, 
+    data=eye_gaze_long_full,
+    random = ~1+Visit|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+
+  coef_table_v0 <- 
+    summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
+  coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+  
+  ci_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 4, 2)
+  est_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, DF, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% 
+    save_kable(file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+                           brain_vars_gaze[i],".png"))
+  
+  sort_vec <- 
+    c("(Intercept)", brain_vars_gaze[i],
+      "RiskGroupHR-Neg", "RiskGroupHR-ASD",
+      "SiteSEA", "SiteSTL", "SiteUNC",
+      "Cand_SexMale", "AgeMRI", 
+      paste0("RiskGroupHR-Neg:", brain_vars_gaze[i]),
+      paste0("RiskGroupLR-Neg:", brain_vars_gaze[i]))
+  
+  write.csv(
+    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+                          brain_vars_gaze[i],".csv"))
+  
+  write.csv(coef_table %>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_Full_",
+                          brain_vars_gaze[i],".csv"))
+}
+```
+
+To help understand these results better, let's analyze the association between proband SCQ total score and infant eye gaze (we have looked at proband SCQ score -> brain measure and brain measure -> eye gaze).
+
+```{r eye_gaze_linear_model}
+# Need to add in proband SCQ
+HR_SCQ_data <-
+  data %>%
+  select(PSCID, SCQ_Pro_Score)
+
+eye_gaze_long_wSCQ <- 
+  inner_join(eye_gaze_long_full, HR_SCQ_data) %>%
+  mutate(RiskGroup = relevel(factor(RiskGroup), ref="HR-Neg"))
+
+# Plot eye gaze by SCQ
+ggplot(data = eye_gaze_long_wSCQ %>% 
+         select(PSCID, CSBS_EyeGaze_V24, SCQ_Pro_Score, RiskGroup) %>%
+         distinct(.),
+       mapping=aes(x=SCQ_Pro_Score, y=CSBS_EyeGaze_V24, color=RiskGroup)) +
+  geom_point()+
+  geom_smooth(method = "lm")
+
+# Estimate group differences
+scq_gaze_fit <- 
+  lm(CSBS_EyeGaze_V24~SCQ_Pro_Score+RiskGroup+RiskGroup*SCQ_Pro_Score+Site+Cand_Sex,
+     data=eye_gaze_long_wSCQ %>% 
+         select(PSCID, CSBS_EyeGaze_V24, SCQ_Pro_Score, RiskGroup, Site, Cand_Sex) %>%
+         distinct(.))
+
+coef_table_v0 <- 
+    summary(scq_gaze_fit)$coefficients[,c("Estimate","Std. Error","Pr(>|t|)")]
+  colnames(coef_table_v0) <- c("Value", "Std.Error", "p-value")
+  coef_cis <- confint(scq_gaze_fit)
+  colnames(coef_cis) <- c("lower", "upper")
+  
+ci_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 4, 2)
+est_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 5, 3)
+  
+coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+  data.frame() %>%
+  rownames_to_column(var="Variable") %>%
+  mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+         Estimate=round(Value, est_digits),
+         p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+  select(Variable, Estimate, CI_95, p_value)
+  
+kable(coef_table, 
+      caption = "CSBS_EyeGaze_V24~SCQ_Pro_Score+RiskGroup+RiskGroup*SCQ_Pro_Score+Site+Cand_Sex") %>%
+  kable_styling()
+```
+
+However, this research question may be ill-posed for a mixed model/longitudinal framework since the longitudinal variable (brain measure) is not the outcome AND occurs before the outcome of interest (24 months).
+
+Thus we take a different approach.  We consider the dataset in wide form and analyze using linear regression.
+
+```{r eye_gaze_wide_analysis}
+eye_gaze_wide_full <-
+  eye_gaze_long_full %>%
+  group_by(PSCID) %>%
+  mutate(visit_copy=Visit) %>%
+  gather(names(eye_gaze_long_full)[!(names(eye_gaze_long_full)%in%"PSCID")], 
+         key=variable, value=number) %>%
+  unite(combi, variable, visit_copy) %>%
+  spread(combi, number) %>%
+  select(-Visit_V06, -Visit_V12, -Visit_V24) %>%
+  ungroup() %>%
+  mutate(RiskGroup_V06 = relevel(factor(RiskGroup_V06), ref="LR-Neg"),
+         RiskGroup_V12 = relevel(factor(RiskGroup_V12), ref="LR-Neg"),
+         RiskGroup_V24 = relevel(factor(RiskGroup_V24), ref="LR-Neg")) %>%
+  inner_join(HR_SCQ_data)
+
+# Convert to numeric if needed
+num_vars <- 
+  names(eye_gaze_wide_full)[!names(eye_gaze_wide_full)%in%
+                              c("PSCID", "Cand_Sex_V06", "Cand_Sex_V12", "Cand_Sex_V24",
+                                "RiskGroup_V06", "RiskGroup_V12", "RiskGroup_V24",
+                                "Site_V06", "Site_V12", "Site_V24")]
+
+eye_gaze_wide_full[num_vars] <- 
+  lapply(eye_gaze_wide_full[num_vars], as.numeric)
+
+# Run linear regression models
+brain_vars_gaze_wide <- list()
+for(i in 1:length(brain_vars_gaze)){
+  brain_vars_gaze_wide[[i]] <- paste0(brain_vars_gaze[i], "_", c("V06", "V12", "V24"))
+}
+
+for(i in 1:length(brain_vars_gaze)){
+  frmla_val <-  
+      as.formula(paste0("CSBS_EyeGaze_V24",
+             "~RiskGroup_V24+", paste0(brain_vars_gaze_wide[[i]], collapse = " + "), 
+             "+", paste0(brain_vars_gaze_wide[[i]], "*RiskGroup_V24", collapse= " + "), 
+             "+",
+             paste0(c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24"), collapse = " + "), 
+             "+", paste0(c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24"), "*RiskGroup_V24", 
+                         collapse= " + "),
+             "+Site_V24+Cand_Sex_V24"))
+  
+  wide_lm_fit <-
+  lm(frmla_val, 
+    data=eye_gaze_wide_full)
+
+  coef_table_v0 <- 
+    summary(wide_lm_fit)$coefficients[,c("Estimate","Std. Error","Pr(>|t|)")]
+  colnames(coef_table_v0) <- c("Value", "Std.Error", "p-value")
+  coef_cis <- confint(wide_lm_fit)
+  colnames(coef_cis) <- c("lower", "upper")
+  
+  ci_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 4, 2)
+  est_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% 
+    save_kable(file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+                           brain_vars_gaze[i],".png"))
+  
+  sort_vec <- 
+    c("(Intercept)", brain_vars_gaze_wide[[i]],
+      "RiskGroupHR-Neg", "RiskGroupHR-ASD",
+      "SiteSEA", "SiteSTL", "SiteUNC",
+      "Cand_SexMale", "AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24", 
+      paste0("RiskGroupHR-Neg:", brain_vars_gaze_wide[[i]]),
+      paste0("RiskGroupLR-Neg:", brain_vars_gaze_wide[[i]]),
+      paste0("RiskGroupHR-Neg:", c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24")),
+      paste0("RiskGroupLR-Neg:", c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24")))
+  
+  write.csv(
+    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+                          brain_vars_gaze[i],".csv"))
+  
+  write.csv(coef_table %>%
+      arrange(factor(Variable, levels=sort_vec)), 
+              file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_Full_",
+                          brain_vars_gaze[i],".csv"))
+}
+```
+
+# Mediation Modeling
+Let's model what have seen so far with respect to proband SCQ total score, V24 CSBS infant eye gaze, and longitudinal brain volume, for HR-ASD infants specifically.
+
+```{r eyegaze_dag}
+mermaid(" 
+        graph LR
+        S(Proband SCQ Score)-->E(Infant Eye Gaze)
+        ")
+
+mermaid(diagram = " 
+        graph LR
+        SCQ(Proband SCQ Score)-->Brain(Infant Brain Vol)
+        ")
+
+mermaid(diagram = " 
+        graph LR
+        Brain(Infant Brain Vol)-->Eye(Infant Eye Gaze)
+        ")
+```
+
+We now move to test the combination of the above to consider confounding
+```{r all_dag}
+mermaid(diagram = " 
+        graph LR
+        Brain(Infant Brain Vol)-->Eye(Infant Eye Gaze)
+        SCQ(Proband SCQ Score)-->Eye(Infant Eye Gaze)
+        SCQ(Proband SCQ Score)-->Brain(Infant Brain Vol)
+        ")
+```
+
+by including proband SCQ score and infant brain volume in the model together.  We consider both the mixed model framework and the linear regression framework.
+
+```{r eye_gaze_mediation_wide_analysis}
+eye_gaze_wide_full <-
+  eye_gaze_long_full %>%
+  group_by(PSCID) %>%
+  mutate(visit_copy=Visit) %>%
+  gather(names(eye_gaze_long_full)[!(names(eye_gaze_long_full)%in%"PSCID")], 
+         key=variable, value=number) %>%
+  unite(combi, variable, visit_copy) %>%
+  spread(combi, number) %>%
+  select(-Visit_V06, -Visit_V12, -Visit_V24) %>%
+  ungroup() %>%
+  mutate(RiskGroup_V06 = relevel(factor(RiskGroup_V06), ref="LR-Neg"),
+         RiskGroup_V12 = relevel(factor(RiskGroup_V12), ref="LR-Neg"),
+         RiskGroup_V24 = relevel(factor(RiskGroup_V24), ref="LR-Neg")) %>%
+  inner_join(HR_SCQ_data)
+
+# Convert to numeric if needed
+num_vars <- 
+  names(eye_gaze_wide_full)[!names(eye_gaze_wide_full)%in%
+                              c("PSCID", "Cand_Sex_V06", "Cand_Sex_V12", "Cand_Sex_V24",
+                                "RiskGroup_V06", "RiskGroup_V12", "RiskGroup_V24",
+                                "Site_V06", "Site_V12", "Site_V24")]
+
+eye_gaze_wide_full[num_vars] <- 
+  lapply(eye_gaze_wide_full[num_vars], as.numeric)
+
+# Run linear regression models
+brain_vars_gaze_wide <- list()
+for(i in 1:length(brain_vars_gaze)){
+  brain_vars_gaze_wide[[i]] <- paste0(brain_vars_gaze[i], "_", c("V06", "V12", "V24"))
+}
+
+for(i in 1:length(brain_vars_gaze)){
+  frmla_val <-  
+      as.formula(paste0("CSBS_EyeGaze_V24",
+             "~RiskGroup_V24+", paste0(brain_vars_gaze_wide[[i]], collapse = " + "), 
+             "+", paste0(brain_vars_gaze_wide[[i]], "*RiskGroup_V24", collapse= " + "), 
+             "+", "SCQ_Pro_Score +",
+             paste0(c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24"), collapse = " + "), 
+             "+", paste0(c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24"), "*RiskGroup_V24", 
+                         collapse= " + "),
+             "+ SCQ_Pro_Score*RiskGroup_V24 +",
+             "+Site_V24+Cand_Sex_V24"))
+  
+  wide_lm_fit <-
+  lm(frmla_val, 
+    data=eye_gaze_wide_full)
+
+  coef_table_v0 <- 
+    summary(wide_lm_fit)$coefficients[,c("Estimate","Std. Error","Pr(>|t|)")]
+  colnames(coef_table_v0) <- c("Value", "Std.Error", "p-value")
+  coef_cis <- confint(wide_lm_fit)
+  colnames(coef_cis) <- c("lower", "upper")
+  
+  ci_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 4, 2)
+  est_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  # kable(coef_table, caption=frmla_val) %>%
+  #   kable_styling() %>% 
+  #   save_kable(file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+  #                          brain_vars_gaze[i],".png"))
+  
+  sort_vec <- 
+    c("(Intercept)", brain_vars_gaze_wide[[i]], "SCQ_Pro_Score",
+      "RiskGroup_V24HR-Neg", "RiskGroup_V24HR-ASD",
+      "SiteSEA", "SiteSTL", "SiteUNC",
+      "Cand_SexMale", "AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24", 
+      paste0("RiskGroup_V24HR-Neg:", brain_vars_gaze_wide[[i]]),
+      paste0("RiskGroup_V24LR-Neg:", brain_vars_gaze_wide[[i]]),
+      paste0("RiskGroup_V24HR-Neg:SCQ_Pro_Score"),
+      paste0("RiskGroup_V24LR-Neg:SCQ_Pro_Score"),
+      paste0("RiskGroup_V24HR-Neg:", c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24")),
+      paste0("RiskGroup_V24LR-Neg:", c("AgeMRI_V06", "AgeMRI_V12", "AgeMRI_V24")))
+  
+  # write.csv(
+  #   coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+  #     arrange(factor(Variable, levels=sort_vec)), 
+  #             file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+  #                         brain_vars_gaze[i],".csv"))
+  # 
+  # write.csv(coef_table %>%
+  #     arrange(factor(Variable, levels=sort_vec)), 
+  #             file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_Full_",
+  #                         brain_vars_gaze[i],".csv"))
+}
+```
+
+```{r eye_gaze_mediation_mixed_model}
+# Scatterplots: Eye gaze by various brain measures by visit and diagnosis group
+for(i in 1:length(brain_vars_gaze)){
+  frmla_val <-  
+      as.formula(paste0(brain_vars_gaze[i],
+             "~RiskGroup+", "CSBS_EyeGaze_V24", 
+             "+RiskGroup*", "CSBS_EyeGaze_V24", 
+             "+AgeMRI+RiskGroup*AgeMRI+
+             SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
+             Site+Cand_Sex"))
+  
+  # Change optimizer
+  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
+  
+  mixed_fit <-
+  lme(frmla_val, 
+    data=eye_gaze_long_wSCQ,
+    random = ~1+Visit|PSCID,
+    na.action = na.omit,
+    control=ctrl)
+
+  coef_table_v0 <- 
+    summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
+  coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+  
+  ci_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 4, 2)
+  est_digits <- ifelse(grepl(x=brain_vars_gaze[i], "CC"), 5, 3)
+  
+  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+    data.frame() %>%
+    rownames_to_column(var="Variable") %>%
+    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+           Estimate=round(Value, est_digits),
+           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+    select(Variable, Estimate, CI_95, DF, p_value)
+  
+  kable(coef_table, caption=frmla_val) %>%
+    kable_styling() %>% print()
+  
+  # kable(coef_table, caption=frmla_val) %>%
+  #   kable_styling() %>% 
+  #   save_kable(file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+  #                          brain_vars_gaze[i],".png"))
+  
+  sort_vec <- 
+    c("(Intercept)", brain_vars_gaze[i],
+      "RiskGroupHR-ASD",
+      "SCQ_Pro_Score",
+      "SiteSEA", "SiteSTL", "SiteUNC",
+      "Cand_SexMale", "AgeMRI", 
+      "RiskGroupHR-Neg:AgeMRI",
+      paste0("RiskGroupHR-Neg:", brain_vars_gaze[i]),
+      "RiskGroupHR-Neg:SCQ_Pro_Score")
+  
+  # write.csv(
+  #   coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept"),]%>%
+  #     arrange(factor(Variable, levels=sort_vec)), 
+  #             file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_",
+  #                         brain_vars_gaze[i],".csv"))
+  # 
+  # write.csv(coef_table %>%
+  #     arrange(factor(Variable, levels=sort_vec)), 
+  #             file=paste0("Plots_Tables/EyeGaze_MixedModel_Estimates_Full_",
+  #                         brain_vars_gaze[i],".csv"))
+}
 ```
