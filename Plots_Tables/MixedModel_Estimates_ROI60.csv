@@ -1,5 +1,5 @@
 "","Variable","Estimate","CI_95","DF","p_value","p_value_FDR"
-"1","SCQ_Pro_Score",-1.315,"(-4.98, 2.35)",233,"0.48",NA
-"2","Cand_SexMale",37.692,"(-0.86, 76.24)",233,"0.055",NA
-"3","RiskGroupHR-ASD",-154.258,"(-613.91, 305.4)",233,"0.509",NA
-"4","RiskGroupHR-ASD:SCQ_Pro_Score",6.83,"(-3.39, 17.05)",233,"0.189",NA
+"1","SCQ_Pro_Score",-1.357,"(-4.75, 2.04)",268,"0.432",NA
+"2","Cand_SexMale",50.521,"(13.16, 87.89)",268,"0.008",NA
+"3","RiskGroupHR-ASD",-1.503,"(-51.5, 48.5)",268,"0.953",NA
+"4","RiskGroupHR-ASD:SCQ_Pro_Score",8.342,"(-1.2, 17.88)",268,"0.086",NA

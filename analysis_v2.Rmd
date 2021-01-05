@@ -503,7 +503,7 @@ for(i in 1:length(brain_vars)){
 ```
 
 # Linear Regression-Confounding Variables
-Now, we conduct the same linear regression analysis as was done before but also include a set of possible confouding variables for eahch model.  The variables are: study site for infant, age of the infant at MRI scan, sex of infant, and proband IQ (VABS ABC score).  We print the same output as in the previous linear regression analysis.
+Now, we conduct the same linear regression analysis as was done before but also include a set of possible confouding variables for eahch model.  The variables are: study site for infant, age of the infant at MRI scan, and sex of infant.  We print the same output as in the previous linear regression analysis.
 ```{r linear_reg_confound, results='asis'}
 time_list <- c("V06",
                   "V12",
@@ -514,7 +514,7 @@ for(i in 1:length(brain_vars)){
     frmla_val <-  
       as.formula(paste0(brain_vars[i],
              "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
-                     Site+AgeMRI+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
+                     Site+AgeMRI+Cand_Sex"))
      
     fit <- lm_fit_calc(frmla_val, time_list[j])
     print(paste("Visit = ", time_list[j], sep=" "))
@@ -569,7 +569,7 @@ colnames(adj_cohens_d_matrix) <- time_list
 for(i in 1:length(brain_vars)){
   frmla_val <-  
       as.formula(paste0(brain_vars[i],
-             "~Pro_SCQgrp + Cand_Sex + AgeMRI + Site + VABS_Pro_ABC_SS"))
+             "~Pro_SCQgrp + Cand_Sex + AgeMRI + Site"))
    for(j in 1:length(time_list)){
     formula = frmla_val
     group_var = "Pro_SCQgrp"
@@ -640,7 +640,7 @@ for(i in 1:length(brain_vars)){
       as.formula(paste0(brain_vars[i],
              "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
              AgeMRI+RiskGroup*AgeMRI+
-             Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
+             Site+Cand_Sex"))
   
   # Change optimizer
   ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
@@ -678,10 +678,9 @@ for(i in 1:length(brain_vars)){
   coef_table$p_value_FDR <- NA
   
   sort_vec <- 
-    c("(Intercept)", "SCQ_Pro_Score", "VABS_Pro_ABC_SS", "Cand_SexMale", 
+    c("(Intercept)", "SCQ_Pro_Score", "Cand_SexMale", 
       "RiskGroupHR-ASD",
-      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI", 
-      "RiskGroupHR-ASD:VABS_Pro_ABC_SS",
+      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI",
       "SiteSEA", "SiteSTL", "SiteUNC","AgeMRI")
   
   write.csv(
@@ -750,41 +749,44 @@ frmla_list <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
+                     Site+Cand_Sex,
                    TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      V2VInd+V3VInd+V4VInd+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
+                     Site+Cand_Sex,
                    TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      V2VInd+V3VInd+V4VInd+
                      RiskGroup*V2VInd+RiskGroup*V3VInd+RiskGroup*V4VInd+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
+                     Site+Cand_Sex)
 
 frmla_list_linear <- list(EACSF~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                             SCQ_Pro_Score+SCQ_Pro_Score*RiskGroup+
-                            Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
+                            Site+Cand_Sex,
                    TCV~RiskGroup+AgeMRI+RiskGroup*AgeMRI+SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
+                     Site+Cand_Sex,
                    TSA~RiskGroup+AgeMRI+RiskGroup*AgeMRI+
                      SCQ_Pro_Score+
                      SCQ_Pro_Score*RiskGroup+
-                     Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
+                     Site+Cand_Sex)
 
 for(i in 1:length(frmla_list)){
   summ_stats_data_long_mixed <-
     summ_stats_data_long %>%
-      mutate(Visit=as.numeric(gsub("V","",Visit)))
+      mutate(Visit=as.numeric(gsub("V","",Visit)),
+             SCQ_Pro_Score = SCQ_Pro_Score-mean(SCQ_Pro_Score, na.rm=TRUE),
+             AgeMRI = AgeMRI - 6,
+             VABS_Pro_ABC_SS = VABS_Pro_ABC_SS-mean(VABS_Pro_ABC_SS, na.rm=TRUE))
   
-  summ_stats_data_long_mixed$V2VInd <- as.numeric(6 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-6)
+  summ_stats_data_long_mixed$V2VInd <- as.numeric(0 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI)
   
-  summ_stats_data_long_mixed$V3VInd <- as.numeric(12 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-12)
+  summ_stats_data_long_mixed$V3VInd <- as.numeric(6 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-6)
   
-  summ_stats_data_long_mixed$V4VInd <- as.numeric(24 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-24)
+  summ_stats_data_long_mixed$V4VInd <- as.numeric(18 <= summ_stats_data_long_mixed$AgeMRI)*(summ_stats_data_long_mixed$AgeMRI-18)
   
   ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
   
@@ -991,7 +993,10 @@ summ_stats_data_long_mixed <-
     summ_stats_data_long %>%
       mutate(Visit=as.numeric(gsub("V","",Visit)),
              Proband_Sex=fct_relevel(Proband_Sex, "Female"),
-             Cand_Sex=fct_relevel(Cand_Sex, "Female"))
+             Cand_Sex=fct_relevel(Cand_Sex, "Female"),
+             SCQ_Pro_Score = SCQ_Pro_Score-mean(SCQ_Pro_Score, na.rm=TRUE),
+             AgeMRI = AgeMRI - 6,
+             VABS_Pro_ABC_SS = VABS_Pro_ABC_SS-mean(VABS_Pro_ABC_SS, na.rm=TRUE))
 
 for(i in 1:length(brain_vars)){
   frmla_val <-  
@@ -1000,7 +1005,7 @@ for(i in 1:length(brain_vars)){
              AgeMRI+RiskGroup*AgeMRI+
              AgeMRI+
              SCQ_Pro_Score*AgeMRI+SCQ_Pro_Score*AgeMRI*RiskGroup+
-             Site+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup"))
+             Site+Cand_Sex"))
   
   # Change optimizer
   ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
@@ -1037,10 +1042,9 @@ for(i in 1:length(brain_vars)){
   # Create table for Google Doc
   coef_table$p_value_FDR <- NA
   
-  sort_vec <- c("(Intercept)", "SCQ_Pro_Score", "VABS_Pro_ABC_SS",
+  sort_vec <- c("(Intercept)", "SCQ_Pro_Score",
                 "Cand_SexMale", "RiskGroupHR-ASD",
       "RiskGroupHR-ASD:SCQ_Pro_Score", "RiskGroupHR-ASD:AgeMRI",
-      "RiskGroupHR-ASD:VABS_Pro_ABC_SS",
       "SCQ_Pro_Score:AgeMRI",
       "RiskGroupHR-ASD:SCQ_Pro_Score:AgeMRI",
       "SiteSEA", "SiteSTL", "SiteUNC",
@@ -1373,11 +1377,11 @@ summ_stats_data_long_12m <-
 med_model_fit_tsa_scq <-
   lm(formula=TSA~SCQ_Pro_Score+
        Site+AgeMRI+Cand_Sex,
-     data=summ_stats_data_long_12m+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup)
+     data=summ_stats_data_long_12m)
 
 med_model_fit_logistic_asd <- 
   glm(formula=RiskGroup~SCQ_Pro_Score+TSA+
-  Site+AgeMRI+Cand_Sex+VABS_Pro_ABC_SS+VABS_Pro_ABC_SS*RiskGroup,
+  Site+AgeMRI+Cand_Sex,
   data=summ_stats_data_long_12m,
   family=binomial(link="logit"))
 
@@ -1399,11 +1403,15 @@ summary(med_model_fit_logistic_asd)
 ```
 
 ## Eye gaze analysis
-It is hypothesized that eye gaze (recorded by the CSBS) is associated with the development of the splenium and right MOG surface area (ROI 48).  We test these hypothises using linear mixed models with the same random effects (intercept and slope for age) and confounders (site, sex, age), and test for group differences using a group by region interaction term.  We include the low risk negative group as a control to test for the impact of genetic risk for ASD.  We also include analyses for brain regions hypothesized to be independent of eye gaze (ROI 44, ROI 41, ROI 08) to assess the specificity of these associations.
+It is hypothesized that eye gaze (recorded by the CSBS) is associated with the development of the splenium and right MOG surface area (ROI 48).  We test these hypotheses using linear mixed models with the same random effects (intercept and slope for age) and confounders (site, sex, age), and test for group differences using a group by region interaction term.  We include the low risk negative group as a control to test for the impact of genetic risk for ASD.  We also include analyses for brain regions hypothesized to be independent of eye gaze (ROI 44, ROI 41, ROI 08) to assess the specificity of these associations.
 
 First, we plot scatterplots with lines of best fit between the 24 month CSBS eye gaze and the 6, 12, 24 month brain measures, colored by group (LR-negative, HR-negative, HR-ASD).
 
 ```{r eye_gazedatamangage}
+# Remove MASS package from namespace
+detach("package:mediation", unload = TRUE)
+detach("package:MASS", unload = TRUE)
+
 ## LR data
 LR_eyegaze_data <- 
   read_csv(file = "Data/LR_Neg_CSBS_SA_Splenium_30Nov2020.csv") %>%
@@ -1565,19 +1573,24 @@ Then we dig further using the linear mixed models
 
 ```{r eye_gaze_mixed_model}
 # Using spline-like time by eye gaze interaction to reflect changing slopes over time
-eye_gaze_long_full <-
+# First center continuous variables
+eye_gaze_long_mixed <-
   eye_gaze_long_full %>%
-  mutate(V00_V06_ind = ifelse(0<=AgeMRI & AgeMRI<6, 1,
+  mutate(CSBS_EyeGaze_V24 = CSBS_EyeGaze_V24 - mean(CSBS_EyeGaze_V24, na.rm=TRUE),
+         AgeMRI = AgeMRI - 6) %>%
+  mutate(V00_V06_ind = ifelse(AgeMRI<0, 1,
                               ifelse(is.na(AgeMRI)==1, NA, 0)),
-         V06_V12_ind = ifelse(6<=AgeMRI & AgeMRI<12, 1,
+         V06_V12_ind = ifelse(0<=AgeMRI & AgeMRI<6, 1,
                               ifelse(is.na(AgeMRI)==1, NA, 0)),
-         V12_V24_ind = ifelse(12<=AgeMRI & AgeMRI<24, 1,
+         V12_V24_ind = ifelse(6<=AgeMRI & AgeMRI<18, 1,
                               ifelse(is.na(AgeMRI)==1, NA, 0)),
-         V24_plus_ind = ifelse(24<=AgeMRI, 1,
+         V24_plus_ind = ifelse(18<=AgeMRI, 1,
                               ifelse(is.na(AgeMRI)==1, NA, 0)))
 
-# eye_gaze_long_full <-
+# eye_gaze_long_mixed <-
 #   eye_gaze_long_full %>%
+#   mutate(CSBS_EyeGaze_V24 = CSBS_EyeGaze_V24 - mean(CSBS_EyeGaze_V24, na.rm=TRUE),
+#        AgeMRI = AgeMRI - 6) %>%
 #   mutate(V06_ind = ifelse(Visit=="V06", 1,
 #                               ifelse(is.na(Visit)==1, NA, 0)),
 #          V12_ind = ifelse(Visit=="V12", 1,
@@ -1598,13 +1611,13 @@ for(i in 1:length(brain_vars_gaze)){
              "+AgeMRI+RiskGroup*AgeMRI+
              Site+Cand_Sex"))
   
-  # frmla_val <-  
+  # frmla_val <-
   #     as.formula(paste0(brain_vars_gaze[i],
   #            "~RiskGroup", "+CSBS_EyeGaze_V24",
   #            "+V12_ind+V24_ind",
   #            "+V12_ind*CSBS_EyeGaze_V24 +
   #            V24_ind*CSBS_EyeGaze_V24",
-  #            "+RiskGroup*", "CSBS_EyeGaze_V24", 
+  #            "+RiskGroup*", "CSBS_EyeGaze_V24",
   #            "+V12_ind*RiskGroup*CSBS_EyeGaze_V24 +
   #            V24_ind*RiskGroup*CSBS_EyeGaze_V24",
   #            "+AgeMRI+RiskGroup*AgeMRI+
@@ -1615,8 +1628,8 @@ for(i in 1:length(brain_vars_gaze)){
   
   mixed_fit <-
   lme(frmla_val, 
-    data=eye_gaze_long_full,
-    random = ~1+Visit|PSCID,
+    data=eye_gaze_long_mixed,
+    random = ~1+AgeMRI|PSCID,
     na.action = na.omit,
     control=ctrl)
 
@@ -1959,7 +1972,7 @@ for(i in 1:length(brain_vars_gaze)){
   mixed_fit <-
   lme(frmla_val, 
     data=eye_gaze_long_wSCQ,
-    random = ~1+Visit|PSCID,
+    random = ~1+AgeMRI|PSCID,
     na.action = na.omit,
     control=ctrl)
 
