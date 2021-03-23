@@ -189,7 +189,8 @@ summ_stats_data_wide <- data %>%
                   levels = c("less_than_college", "college_degree", 
                              "some_grad_level", "grad_degree", "not_answered")),
          Cand_Race=factor(Cand_Race, levels=
-                            c("asian","black","more_than_one_race","white","not_answered")))
+                            c("asian","black","more_than_one_race",
+                              "white","not_answered")))
 
 vars_to_convert <- names(summ_stats_data_wide[grepl("V06|V12|V24",
                                               names(summ_stats_data_wide))])
@@ -201,7 +202,9 @@ summ_stats_data_long <-
   spread(key=Variable, value=var_value) %>%
   mutate(Visit=gsub("_","",Visit)) %>%
   arrange(PSCID, Visit) %>%
-  select(PSCID, Visit, everything())
+  select(PSCID, Visit, everything()) %>%
+  filter(!(PSCID%in%c("PHI0276")&Visit=="V12"))
+# Removing CandID 530721 at visit 12 months due to Jessica's email
 
 brain_vars <- 
   c("EACSF", "TCV", "TSA",
@@ -219,13 +222,15 @@ summ_stats_data_long <- summ_stats_data_long %>%
          Proband_Sex=relevel(factor(Proband_Sex), ref = "Male"),
          Pro_SCQgrp=ifelse(SCQ_Pro_Score>=21&RiskGroup=="HR-ASD", "high",
                            ifelse(SCQ_Pro_Score<21&RiskGroup=="HR-ASD", "low",
-                                  ifelse(RiskGroup=="HR-Neg"|is.na(SCQ_Pro_Score)==1, NA, NA)))
+                                  ifelse(RiskGroup=="HR-Neg"|is.na(SCQ_Pro_Score)==1, 
+                                         NA, NA)))
          ) %>%
   mutate(Pro_SCQgrp=relevel(factor(Pro_SCQgrp), ref='low'))
 
 summ_stats_data_long_baseline <- 
   summ_stats_data_long %>%
-  select(PSCID, Visit, Site:Mother_Edu, Cand_Sex, Pro_Age_SCQ_y, ADOS_SevScore, Pro_SCQgrp) %>%
+  select(PSCID, Visit, Site:Mother_Edu, Cand_Sex, 
+         Pro_Age_SCQ_y, ADOS_SevScore, Pro_SCQgrp) %>%
   filter(Visit=="V24") %>%
   select(-PSCID, -Visit) %>%
   mutate(Father_Age_y=as.numeric(Father_Age_y),
