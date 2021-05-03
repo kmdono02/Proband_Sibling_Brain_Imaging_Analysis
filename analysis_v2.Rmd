@@ -20,6 +20,7 @@ library(formula.tools)
 library(nlme)
 library(ggpubr)
 library(DiagrammeR)
+library(redres)
 ```
 
 # Introduction
@@ -640,109 +641,173 @@ summ_stats_data_long_mixed %>%
   group_by(RiskGroup) %>% 
   summarise(corr=cor(SCQ_Pro_Score, VABS_Pro_ABC_SS, use = "pairwise.complete.obs"))
 
-for(i in 1:length(brain_vars)){
-  frmla_val <-  
-      as.formula(paste0(brain_vars[i],
-             "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
-             AgeMRI+RiskGroup*AgeMRI+
-             Site+Cand_Sex"))
-  
-  # Change optimizer
-  ctrl <- lmeControl(opt='optim', maxIter=500, msMaxIter = 500)
-  
-  mixed_fit <-
-  lme(frmla_val, 
-    data=summ_stats_data_long_mixed,
-    random = ~1+Visit|PSCID,
-    na.action = na.omit,
-    control=ctrl)
+proband_vars <- c("SCQ_Pro_Score", "ADIR_Pro_A_Tot", 
+                  "ADIR_Pro_C_Tot", "ADIR_Pro_BV_Tot")
 
-  coef_table_v0 <- 
-    summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
-  coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+for(k in 1:length(proband_vars)){
+  for(i in 1:length(brain_vars)){
+    frmla_val <-  
+        as.formula(paste0(brain_vars[i],
+               "~RiskGroup+", proband_vars[k], "+RiskGroup*", proband_vars[k], "+
+               AgeMRI+RiskGroup*AgeMRI+
+               Site+Cand_Sex"))
+    
+    # Change optimizer
+    ctrl <- lmeControl(opt='optim', maxIter=1000, msMaxIter = 1000)
+    
+    mixed_fit <-
+    lme(frmla_val, 
+      data=summ_stats_data_long_mixed,
+      random = ~1+Visit|PSCID,
+      na.action = na.omit,
+      control=ctrl)
   
-  ci_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 4, 2)
-  est_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 5, 3)
+    coef_table_v0 <- 
+      summary(mixed_fit)$tTable[,c("Value","Std.Error","DF","p-value")]
+    coef_cis <- intervals(mixed_fit,which="fixed")$fixed[,c("lower","upper")]
+    
+    ci_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 4, 2)
+    est_digits <- ifelse(grepl(x=brain_vars[i], "CC"), 5, 3)
+    
+    coef_table <- cbind(coef_table_v0, coef_cis) %>% 
+      data.frame() %>%
+      rownames_to_column(var="Variable") %>%
+      mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
+             Estimate=round(Value, est_digits),
+             p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
+      select(Variable, Estimate, CI_95, DF, p_value)
+    
+    kable(coef_table, caption=frmla_val) %>%
+      kable_styling() %>% print()
+    
+    kable(coef_table, caption=frmla_val) %>%
+      kable_styling() %>% 
+      save_kable(file=paste0("Plots_Tables/MixedModel_Estimates_",
+                             brain_vars[i], "_", proband_vars[k],".png"))
+    
+    # Create table for Google Doc
+    coef_table$p_value_FDR <- NA
+    
+    sort_vec <- 
+      c("(Intercept)", proband_vars[k], "Cand_SexMale", 
+        "RiskGroupHR-ASD",
+        paste0("RiskGroupHR-ASD:", proband_vars[k]),  "RiskGroupHR-ASD:AgeMRI",
+        "SiteSEA", "SiteSTL", "SiteUNC","AgeMRI")
+    
+    write.csv(
+      coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept|VABS"),]%>%
+        arrange(factor(Variable, levels=sort_vec)), 
+                file=paste0("Plots_Tables/MixedModel_Estimates_",
+                            brain_vars[i], "_", proband_vars[k],".csv"))
+    
+    write.csv(coef_table %>%
+        arrange(factor(Variable, levels=sort_vec)), 
+                file=paste0("Plots_Tables/MixedModel_Estimates_Full_",
+                            brain_vars[i], "_", proband_vars[k],".csv"))
+    
+    mixed_effect_data_complete <- 
+      data.frame(getData(mixed_fit), 
+                 "predicted_value"=predict(mixed_fit, 
+                                           newdata = getData(mixed_fit)))
+    
+    
+    time_plot <- 
+      ggplot(data=mixed_effect_data_complete, mapping=aes(x=Visit,
+                                              color=RiskGroup,
+                                              group=PSCID))+
+      geom_point(mapping=aes(y=predicted_value))+
+      # geom_point(mapping=
+      #              aes(y=eval(
+      #                parse(text=formula.tools::lhs(frmla_val)))))+
+      geom_line(mapping=aes(y=predicted_value))+
+      labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+           title=paste0("Mixed model fitted values with diagnosis by visit interaction term\nand random slopes for visit, for ", proband_vars[k], " model"))
+    
+    ggsave(filename=
+             paste0("Plots_Tables/MixedModel_TimeTrend_",
+                    brain_vars[i], "_", proband_vars[k],".png"), plot=time_plot)
+    
+    print(time_plot)
   
-  coef_table <- cbind(coef_table_v0, coef_cis) %>% 
-    data.frame() %>%
-    rownames_to_column(var="Variable") %>%
-    mutate(CI_95=paste0("(",round(lower,ci_digits),", ",round(upper,ci_digits),")"),
-           Estimate=round(Value, est_digits),
-           p_value=ifelse(p.value>=0.001, round(p.value,3),"<0.001")) %>%
-    select(Variable, Estimate, CI_95, DF, p_value)
-  
-  kable(coef_table, caption=frmla_val) %>%
-    kable_styling() %>% print()
-  
-  kable(coef_table, caption=frmla_val) %>%
-    kable_styling() %>% 
-    save_kable(file=paste0("Plots_Tables/MixedModel_Estimates_",brain_vars[i],".png"))
-  
-  # Create table for Google Doc
-  coef_table$p_value_FDR <- NA
-  
-  sort_vec <- 
-    c("(Intercept)", "SCQ_Pro_Score", "Cand_SexMale", 
-      "RiskGroupHR-ASD",
-      "RiskGroupHR-ASD:SCQ_Pro_Score",  "RiskGroupHR-ASD:AgeMRI",
-      "SiteSEA", "SiteSTL", "SiteUNC","AgeMRI")
-  
-  write.csv(
-    coef_table[!str_detect(coef_table$Variable,"Site|Age|Intercept|VABS"),]%>%
-      arrange(factor(Variable, levels=sort_vec)), 
-              file=paste0("Plots_Tables/MixedModel_Estimates_",brain_vars[i],".csv"))
-  
-  write.csv(coef_table %>%
-      arrange(factor(Variable, levels=sort_vec)), 
-              file=paste0("Plots_Tables/MixedModel_Estimates_Full_",brain_vars[i],".csv"))
-  
-  mixed_effect_data_complete <- 
-    data.frame(getData(mixed_fit), 
-               "predicted_value"=predict(mixed_fit, 
-                                         newdata = getData(mixed_fit)))
-  
-  
-time_plot <- 
-  ggplot(data=mixed_effect_data_complete, mapping=aes(x=Visit,
-                                          color=RiskGroup,
-                                          group=PSCID))+
-  geom_point(mapping=aes(y=predicted_value))+
-  # geom_point(mapping=
-  #              aes(y=eval(
-  #                parse(text=formula.tools::lhs(frmla_val)))))+
-  geom_line(mapping=aes(y=predicted_value))+
-  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
-       title="Mixed model fitted values with diagnosis by visit interaction term\nand random slopes for visit")
-
-ggsave(filename=
-         paste0("Plots_Tables/MixedModel_TimeTrend_",
-                brain_vars[i],".png"), plot=time_plot)
-
-print(time_plot)
-
-# Also create cross sectional plots at each time point, with brain measure on x axis to compare to previous cross sectional plots
-for(j in 1:length(unique(mixed_effect_data_complete$Visit))){
-mixed_effect_data_complete_cross_sectional <-
-    mixed_effect_data_complete %>%
-      filter(Visit==unique(mixed_effect_data_complete$Visit)[j])
-
-scq_plot <- ggplot(data=mixed_effect_data_complete_cross_sectional, mapping=aes(x=SCQ_Pro_Score,color=RiskGroup))+
-  geom_point(mapping=aes(y=predicted_value))+
-  geom_smooth(mapping=aes(y=predicted_value,group=RiskGroup),
-              method = "lm")+
-  labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
-       title=paste0("Mixed model fitted values at ", unique(mixed_effect_data_complete$Visit)[j],
-                    " months\nwith diagnosis by visit interaction term\nand random slopes for visit"))
-
-ggsave(filename=
-         paste0("Plots_Tables/MixedModel_SCQTrend_",
-                unique(mixed_effect_data_complete$Visit)[j],
-                brain_vars[i],".png"), plot=scq_plot)
-
-print(scq_plot)
+  # Also create cross sectional plots at each time point, with brain measure on x axis to compare to previous cross sectional plots
+    for(j in 1:length(unique(mixed_effect_data_complete$Visit))){
+    mixed_effect_data_complete_cross_sectional <-
+        mixed_effect_data_complete %>%
+          filter(Visit==unique(mixed_effect_data_complete$Visit)[j])
+    
+    scq_plot <- 
+      ggplot(data=mixed_effect_data_complete_cross_sectional,
+             mapping=aes(x=SCQ_Pro_Score,color=RiskGroup))+
+        geom_point(mapping=aes(y=predicted_value))+
+        geom_smooth(mapping=aes(y=predicted_value,group=RiskGroup),
+                  method = "lm")+
+        labs(y=paste("Fitted Value:", formula.tools::lhs(frmla_val)), 
+           title=paste0("Mixed model fitted values at ",
+                        unique(mixed_effect_data_complete$Visit)[j],
+                        " months\nwith diagnosis by visit interaction term\nand random slopes for visit"))
+    
+    ggsave(filename=
+             paste0("Plots_Tables/MixedModel_SCQTrend_",
+                    unique(mixed_effect_data_complete$Visit)[j],
+                    brain_vars[i], "_", proband_vars[k],".png"), plot=scq_plot)
+    
+    print(scq_plot)
+    }
+  }
 }
+```
+
+## Primary model diagnostics
+We perform residual diagnostics on the primary mixed models with linear time.  These were SCQ as the proband measure and TCV, TSA as the brain variables (2 models).
+
+```{r mixed_model_single_slope, results='asis'}
+primary_brain <- c("TCV", "TSA", "CCGenu", "CCbody", "CCSplenium")
+
+for(i in 1:length(primary_brain)){
+    frmla_val <-  
+        as.formula(paste0(primary_brain[i],
+               "~RiskGroup+SCQ_Pro_Score+RiskGroup*SCQ_Pro_Score+
+               AgeMRI+RiskGroup*AgeMRI+
+               Site+Cand_Sex"))
+    
+    # Change optimizer
+    ctrl <- lmeControl(opt='optim', maxIter=1000, msMaxIter = 1000)
+    
+    mixed_fit <-
+    lme(frmla_val, 
+      data=summ_stats_data_long_mixed,
+      random = ~1+Visit|PSCID,
+      na.action = na.omit,
+      control=ctrl)
+    
+    # Diagnostics
+    ## Compute residuals using redres
+    residuals_by_fitted_df <- data.frame("pred_vals"=mixed_fit$fitted[,"PSCID"],
+                                         "residuals"=residuals(mixed_fit, 
+                                                               type="normalized"))
+    
+    ## Plot fitted by residuals
+    ggplot(data=residuals_by_fitted_df, mapping=aes(x=pred_vals, y=residuals))+
+      geom_point()+
+      geom_hline(yintercept = 0, linetype="dashed")+
+      labs(x="Conditional fitted values", y="Normalized conditional residuals")+
+      theme_bw()
+    ggsave(filename = 
+             paste0("Plots_Tables/mixed_models_fitted_by_residuals_scq_", primary_brain[i],
+                    ".png"), 
+           limitsize = FALSE)
+    
+    ## QQ_plot
+    ggplot(data=residuals_by_fitted_df, mapping=aes(sample=residuals))+
+      stat_qq()+
+      stat_qq_line()+
+      labs(x="Theoretical", y="Sample")+
+      theme_bw()
+    ggsave(filename = 
+             paste0("Plots_Tables/mixed_models_residuals_qqplot_scq_", primary_brain[i],
+                    ".png"))
 }
+
 ```
 
 We also consider a spline modeling, with separate splines for each diagnostic group.  The knots are placed at visit points (6 months, 12 months, 24 months).  We only consider spline models for the "macro" scale brain measures (EACSF, TCV, TSA) as we see that compared to the linear mixed models, the splines do not significant new information.  This was determined by a asymptotic likelihood ratio test with the linear mixed model as the null model (as the linear and spline models are nested models), using the restricted log likelihoods for each model.  As before, the random effects consist of a random intercept and a random slope for age.

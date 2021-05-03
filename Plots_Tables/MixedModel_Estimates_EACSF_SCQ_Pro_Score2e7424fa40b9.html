@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>body{background-color:white;}</style>
+<script src="lib2e74f39a5c/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="lib2e74f39a5c/bootstrap-3.3.5/css/simplex.min.css" rel="stylesheet" />
+<script src="lib2e74f39a5c/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="lib2e74f39a5c/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="lib2e74f39a5c/bootstrap-3.3.5/shim/respond.min.js"></script>
+<link href="lib2e74f39a5c/lightable-0.0.1/lightable.css" rel="stylesheet" />
+<script src="lib2e74f39a5c/kePrint-0.0.1/kePrint.js"></script>
+
+</head>
+<body>
+<table class="table" style="margin-left: auto; margin-right: auto;">
+<caption>EACSF ~ RiskGroup + SCQ_Pro_Score + RiskGroup * SCQ_Pro_Score + AgeMRI + RiskGroup * AgeMRI + Site + Cand_Sex</caption>
+ <thead>
+  <tr>
+   <th style="text-align:left;"> Variable </th>
+   <th style="text-align:right;"> Estimate </th>
+   <th style="text-align:left;"> CI_95 </th>
+   <th style="text-align:right;"> DF </th>
+   <th style="text-align:left;"> p_value </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:right;"> 69891.512 </td>
+   <td style="text-align:left;"> (64328.53, 75454.5) </td>
+   <td style="text-align:right;"> 336 </td>
+   <td style="text-align:left;"> &lt;0.001 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> RiskGroupHR-ASD </td>
+   <td style="text-align:right;"> 6026.306 </td>
+   <td style="text-align:left;"> (-1794.39, 13847) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.13 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> SCQ_Pro_Score </td>
+   <td style="text-align:right;"> -350.365 </td>
+   <td style="text-align:left;"> (-741.6, 40.87) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.079 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> AgeMRI </td>
+   <td style="text-align:right;"> -200.770 </td>
+   <td style="text-align:left;"> (-334.96, -66.58) </td>
+   <td style="text-align:right;"> 336 </td>
+   <td style="text-align:left;"> 0.003 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> SiteSEA </td>
+   <td style="text-align:right;"> 1601.368 </td>
+   <td style="text-align:left;"> (-4356.24, 7558.97) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.597 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> SiteSTL </td>
+   <td style="text-align:right;"> 240.381 </td>
+   <td style="text-align:left;"> (-5128.77, 5609.53) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.93 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> SiteUNC </td>
+   <td style="text-align:right;"> 1911.338 </td>
+   <td style="text-align:left;"> (-3776.73, 7599.41) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.509 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Cand_SexMale </td>
+   <td style="text-align:right;"> 5106.092 </td>
+   <td style="text-align:left;"> (979.18, 9233.01) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.016 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> RiskGroupHR-ASD:SCQ_Pro_Score </td>
+   <td style="text-align:right;"> 1329.164 </td>
+   <td style="text-align:left;"> (325.06, 2333.27) </td>
+   <td style="text-align:right;"> 267 </td>
+   <td style="text-align:left;"> 0.01 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> RiskGroupHR-ASD:AgeMRI </td>
+   <td style="text-align:right;"> -341.007 </td>
+   <td style="text-align:left;"> (-638.33, -43.68) </td>
+   <td style="text-align:right;"> 336 </td>
+   <td style="text-align:left;"> 0.025 </td>
+  </tr>
+</tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,5 @@
+"","Variable","Estimate","CI_95","DF","p_value","p_value_FDR"
+"1","ADIR_Pro_BV_Tot",3.686,"(-2.32, 9.69)",204,"0.228",NA
+"2","Cand_SexMale",71.928,"(25.58, 118.28)",204,"0.003",NA
+"3","RiskGroupHR-ASD",-36.798,"(-305.33, 231.73)",204,"0.787",NA
+"4","RiskGroupHR-ASD:ADIR_Pro_BV_Tot",1.342,"(-14.03, 16.72)",204,"0.863",NA
