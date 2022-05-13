@@ -1,5 +1,5 @@
-# Proband Sibling Brain Imaging Analysis
-R code for statistical analysis generating results referenced in Girault et al. (2020)
+# Brain imaging markers of inherited liability for autism implicate infant visual regions and pathways
+R code for statistical analysis generating results referenced in Girault et al. (2022)
   
 **1) Plots_Tables**
 
